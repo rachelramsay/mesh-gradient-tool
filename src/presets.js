@@ -119,12 +119,13 @@ function stripModuleSyntax(src) {
 
 // Build a single self-contained IIFE: shader + engine + config + bootstrap.
 export async function buildStandaloneJS(config, base = './') {
-  const [shaderSrc, engineSrc] = await Promise.all([
+  const [shaderSrc, meshShaderSrc, engineSrc] = await Promise.all([
     fetchSource(base + 'src/shader.glsl.js'),
+    fetchSource(base + 'src/shader-mesh.js'),
     fetchSource(base + 'src/gradient.js'),
   ]);
 
-  const body = stripModuleSyntax(shaderSrc) + '\n' + stripModuleSyntax(engineSrc);
+  const body = stripModuleSyntax(shaderSrc) + '\n' + stripModuleSyntax(meshShaderSrc) + '\n' + stripModuleSyntax(engineSrc);
   const cfg = JSON.stringify(config, null, 2);
 
   return `/* Animated mesh gradient — self-contained, no dependencies.

@@ -4,7 +4,7 @@
 import { initMeshGradient, MAX_POINTS, DEFAULT_CONFIG } from './gradient.js';
 import { el, slider } from './controls.js';
 import { deriveDark } from './color.js';
-import { figmaShaderToConfig } from './figma-import.js';
+import { figmaShaderToConfig, refineGridOrderByReference } from './figma-import.js';
 import { downloadPNG } from './capture.js';
 import {
   PRESETS, configToJSON, parseConfigJSON,
@@ -41,7 +41,7 @@ function pointColor(p) { return mode === 'dark' ? resolveDark(p) : p.color; }
 // ---------------------------------------------------------------- point handles
 function pushConfig() {
   const points = config.points.map((p) => ({ x: p.x, y: p.y, spread: p.spread, color: pointColor(p) }));
-  gradient.setConfig({ points, animation: config.animation, effects: config.effects });
+  gradient.setConfig({ mode: config.mode || 'points', points, animation: config.animation, effects: config.effects });
   if (!gradient.isPlaying()) gradient.redraw();
 }
 
@@ -239,14 +239,23 @@ function renderPointPanel() {
     },
   });
 
+  const isMesh = config.mode === 'mesh';
   pointsPanel.append(
     swatches,
     el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Light' }), lightInput]),
     el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Dark' }), darkInput, darkTag]),
-    spreadCtl.row,
-    el('div', { class: 'row' }, [addBtn, delBtn]),
-    el('div', { class: 'muted small', text: `${config.points.length}/${MAX_POINTS} points · drag dots on the canvas to move` }),
   );
+  if (isMesh) {
+    pointsPanel.append(
+      el('div', { class: 'muted small', text: '4×4 bicubic mesh (Figma-compatible) · 16 fixed grid points · drag dots to move' }),
+    );
+  } else {
+    pointsPanel.append(
+      spreadCtl.row,
+      el('div', { class: 'row' }, [addBtn, delBtn]),
+      el('div', { class: 'muted small', text: `${config.points.length}/${MAX_POINTS} points · drag dots on the canvas to move` }),
+    );
+  }
 }
 
 // -------------------------------------------------------------- panel: animation
@@ -341,6 +350,7 @@ document.getElementById('save-preset').addEventListener('click', () => {
 function applyConfig(next) {
   const prevFrame = config.frame;
   config = JSON.parse(JSON.stringify(next));
+  if (!config.mode) config.mode = 'points';
   if (!config.animation) config.animation = { ...DEFAULT_CONFIG.animation };
   if (!config.effects) config.effects = { ...DEFAULT_CONFIG.effects };
   // Color presets carry no frame — keep the user's current canvas size.
@@ -416,5 +426,21 @@ window.meshGradientEditor = {
     applyConfig(figmaShaderToConfig(properties, opts));
     pushConfig();
     return config.points.length;
+  },
+  // Verified import: additionally refines the recovered 4x4 grid topology
+  // against a reference render of the Figma node (same-origin or data: URL),
+  // hill-climbing slot swaps until the pixel delta stops improving.
+  importFigmaShaderVerified: async (properties, referenceURL, opts) => {
+    const cfg = figmaShaderToConfig(properties, opts);
+    let residual = null;
+    if (cfg.mode === 'mesh' && referenceURL) {
+      const refined = await refineGridOrderByReference(cfg.points, referenceURL);
+      cfg.points = refined.points;
+      residual = refined.residual;
+    }
+    applyMode('light');
+    applyConfig(cfg);
+    pushConfig();
+    return { points: config.points.length, mode: cfg.mode, residual };
   },
 };

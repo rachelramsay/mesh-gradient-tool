@@ -5,10 +5,16 @@
 //   gradient.play(); gradient.pause(); gradient.setConfig({ ... });
 //
 import { VERT, FRAG } from './shader.glsl.js';
+import { VERT_MESH, FRAG_MESH } from './shader-mesh.js';
 
 export const MAX_POINTS = 16;
+const MESH_TESS = 128; // matches Figma's default tessellation quality
 
 export const DEFAULT_CONFIG = {
+  // 'points' = free inverse-distance points; 'mesh' = 4x4 Catmull-Rom bicubic
+  // grid (Figma-compatible). In mesh mode, points[] holds exactly 16 entries in
+  // row-major grid order (p00,p10,p20,p30, p01,...), spread is ignored.
+  mode: 'points',
   points: [
     { x: 0.15, y: 0.20, color: '#5b3cc4' }, // indigo
     { x: 0.85, y: 0.15, color: '#9d4edd' }, // violet
@@ -29,6 +35,7 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function mergeConfig(base, over) {
   const c = clone(base);
   if (!over) return c;
+  if (over.mode) c.mode = over.mode;
   if (over.points) c.points = clone(over.points);
   if (over.animation) Object.assign(c.animation, over.animation);
   if (over.effects) Object.assign(c.effects, over.effects);
@@ -42,6 +49,8 @@ function hexToRgb(hex) {
   const n = parseInt(h, 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
+
+function srgb2lin(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 
 function compile(gl, type, src) {
   const s = gl.createShader(type);
@@ -100,6 +109,42 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
   const colBuf = new Float32Array(MAX_POINTS * 3);
   const spreadBuf = new Float32Array(MAX_POINTS).fill(1);
 
+  // ---- bicubic mesh mode: second program + tessellated (s,t) grid ------------
+  const meshProg = gl.createProgram();
+  gl.attachShader(meshProg, compile(gl, gl.VERTEX_SHADER, VERT_MESH));
+  gl.attachShader(meshProg, compile(gl, gl.FRAGMENT_SHADER, FRAG_MESH));
+  gl.linkProgram(meshProg);
+  if (!gl.getProgramParameter(meshProg, gl.LINK_STATUS)) {
+    throw new Error('Mesh program link error: ' + gl.getProgramInfoLog(meshProg));
+  }
+  const MU = {};
+  ['uCtrlPos', 'uCtrlColor', 'uTime', 'uWarp', 'uNoiseScale', 'uGrain'].forEach((n) => {
+    MU[n] = gl.getUniformLocation(meshProg, (n === 'uCtrlPos' || n === 'uCtrlColor') ? n + '[0]' : n);
+  });
+  const aST = gl.getAttribLocation(meshProg, 'aST');
+
+  // (s,t) grid: (T+1)^2 vertices, T*T*2 triangles, Uint16 indices (WebGL1-safe)
+  const T = MESH_TESS, NV = T + 1;
+  const stData = new Float32Array(NV * NV * 2);
+  for (let j = 0, o = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
+    stData[o++] = i / T; stData[o++] = j / T;
+  }
+  const idxData = new Uint16Array(T * T * 6);
+  for (let j = 0, o = 0; j < T; j++) for (let i = 0; i < T; i++) {
+    const i0 = j * NV + i, i1 = i0 + 1, i2 = i0 + NV, i3 = i2 + 1;
+    idxData[o++] = i0; idxData[o++] = i2; idxData[o++] = i1;
+    idxData[o++] = i1; idxData[o++] = i2; idxData[o++] = i3;
+  }
+  const stBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, stBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, stData, gl.STATIC_DRAW);
+  const idxBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
+
+  const ctrlPosBuf = new Float32Array(16 * 2);
+  const ctrlColBuf = new Float32Array(16 * 3);
+
   let time = 0;
   let lastT = 0;
   let raf = null;
@@ -128,7 +173,46 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
   }
 
   function render() {
+    if (config.mode === 'mesh' && config.points.length === 16) renderMesh();
+    else renderPoints();
+  }
+
+  function renderMesh() {
+    const a = config.animation, e = config.effects;
+    let mr = 0, mg = 0, mb = 0;
+    for (let i = 0; i < 16; i++) {
+      const p = config.points[i];
+      ctrlPosBuf[i * 2] = p.x;
+      ctrlPosBuf[i * 2 + 1] = p.y; // mesh vertex shader is y-down, like the UI
+      const rgb = hexToRgb(p.color);
+      ctrlColBuf[i * 3] = srgb2lin(rgb[0]);
+      ctrlColBuf[i * 3 + 1] = srgb2lin(rgb[1]);
+      ctrlColBuf[i * 3 + 2] = srgb2lin(rgb[2]);
+      mr += rgb[0]; mg += rgb[1]; mb += rgb[2];
+    }
+    gl.useProgram(meshProg);
+    gl.bindBuffer(gl.ARRAY_BUFFER, stBuf);
+    gl.enableVertexAttribArray(aST);
+    gl.vertexAttribPointer(aST, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+    gl.uniform2fv(MU.uCtrlPos, ctrlPosBuf);
+    gl.uniform3fv(MU.uCtrlColor, ctrlColBuf);
+    gl.uniform1f(MU.uTime, time * a.noiseSpeed);
+    gl.uniform1f(MU.uWarp, a.warp);
+    gl.uniform1f(MU.uNoiseScale, a.noiseScale);
+    gl.uniform1f(MU.uGrain, e.grain);
+    // clear to the mean control color so any warp-exposed sliver isn't black
+    gl.clearColor(mr / 16, mg / 16, mb / 16, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, T * T * 6, gl.UNSIGNED_SHORT, 0);
+  }
+
+  function renderPoints() {
     const pts = config.points.slice(0, MAX_POINTS);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
     for (let i = 0; i < pts.length; i++) {
       posBuf[i * 2] = pts[i].x;
       posBuf[i * 2 + 1] = 1.0 - pts[i].y; // flip: UI y-down -> GL y-up
@@ -258,6 +342,9 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
       if (ro) ro.disconnect();
       gl.deleteProgram(prog);
       gl.deleteBuffer(buf);
+      gl.deleteProgram(meshProg);
+      gl.deleteBuffer(stBuf);
+      gl.deleteBuffer(idxBuf);
     },
   };
 
