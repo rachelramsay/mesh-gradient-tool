@@ -4,7 +4,7 @@
 import { initMeshGradient, MAX_POINTS, DEFAULT_CONFIG } from './gradient.js';
 import { el, slider } from './controls.js';
 import { deriveDark } from './color.js';
-import { figmaShaderToConfig, refineGridOrderByReference } from './figma-import.js';
+import { figmaShaderToConfig, refineGridOrderByReference, configToFigmaShaderPaint } from './figma-import.js';
 import { downloadPNG } from './capture.js';
 import {
   PRESETS, configToJSON, parseConfigJSON,
@@ -427,6 +427,10 @@ window.meshGradientEditor = {
     pushConfig();
     return config.points.length;
   },
+  // Build a native Figma SHADER paint from the current mesh-mode design —
+  // assign it into any node's fills via the Plugin API to apply this gradient
+  // as a live, editable Figma mesh shader fill.
+  getFigmaShaderPaint: (opts) => configToFigmaShaderPaint(config, opts),
   // Verified import: additionally refines the recovered 4x4 grid topology
   // against a reference render of the Figma node (same-origin or data: URL),
   // hill-climbing slot swaps until the pixel delta stops improving.

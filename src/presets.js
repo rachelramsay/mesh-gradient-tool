@@ -1,6 +1,24 @@
 // Built-in presets, config import/export, and standalone code export.
 
 export const PRESETS = {
+  // Figma's "Mesh gradient" shader default: the pristine 4x4 lattice with its
+  // stock palette, in bicubic mesh mode. Row-major grid order (p00..p33), so
+  // every point maps 1:1 onto the shader's slots for round-tripping to Figma.
+  'Figma Lattice': {
+    mode: 'mesh',
+    points: [
+      { x: 0.00, y: 0.00, color: '#ff6b6b' }, { x: 0.33, y: 0.00, color: '#ffa36b' },
+      { x: 0.67, y: 0.00, color: '#ffd16b' }, { x: 1.00, y: 0.00, color: '#ffd166' },
+      { x: 0.00, y: 0.33, color: '#b34d99' }, { x: 0.33, y: 0.33, color: '#cc8c80' },
+      { x: 0.67, y: 0.33, color: '#e6b373' }, { x: 1.00, y: 0.33, color: '#80b359' },
+      { x: 0.00, y: 0.67, color: '#6680b3' }, { x: 0.33, y: 0.67, color: '#59a6a6' },
+      { x: 0.67, y: 0.67, color: '#33a68c' }, { x: 1.00, y: 0.67, color: '#1a8cb3' },
+      { x: 0.00, y: 1.00, color: '#05d6a1' }, { x: 0.33, y: 1.00, color: '#1ab3a6' },
+      { x: 0.67, y: 1.00, color: '#1a99b3' }, { x: 1.00, y: 1.00, color: '#128ab3' },
+    ],
+    animation: { play: true, speed: 0.6, noiseScale: 1.2, noiseSpeed: 0.08, warp: 0.3 },
+    effects: { falloff: 1.0, grain: 0, vignette: 0 },
+  },
   Twilight: {
     points: [
       { x: 0.15, y: 0.20, color: '#5b3cc4' },
