@@ -12,29 +12,8 @@ attribute vec2 aST;
 
 uniform vec2  uCtrlPos[16];   // grid positions, x/y in 0..1 (y down)
 uniform vec3  uCtrlColor[16]; // grid colors, LINEAR light
-uniform float uTime;
-uniform float uWarp;
-uniform float uNoiseScale;
 
 varying vec3 vColor;
-
-// --- simplex noise (for the motion warp) ---
-vec3 mod289(vec3 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec2 mod289(vec2 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec3 permute(vec3 x){ return mod289(((x*34.0)+1.0)*x); }
-float snoise(vec2 v){
-  const vec4 C = vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
-  vec2 i=floor(v+dot(v,C.yy)); vec2 x0=v-i+dot(i,C.xx);
-  vec2 i1=(x0.x>x0.y)?vec2(1.0,0.0):vec2(0.0,1.0);
-  vec4 x12=x0.xyxy+C.xxzz; x12.xy-=i1; i=mod289(i);
-  vec3 p=permute(permute(i.y+vec3(0.0,i1.y,1.0))+i.x+vec3(0.0,i1.x,1.0));
-  vec3 m=max(0.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.0);
-  m=m*m; m=m*m;
-  vec3 x=2.0*fract(p*C.www)-1.0; vec3 h=abs(x)-0.5; vec3 ox=floor(x+0.5); vec3 a0=x-ox;
-  m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
-  vec3 g; g.x=a0.x*x0.x+h.x*x0.y; g.yz=a0.yz*x12.xz+h.yz*x12.yw;
-  return 130.0*dot(m,g);
-}
 
 // --- Catmull-Rom basis ---
 float cr1(float a,float b,float c,float d,float t){
@@ -63,16 +42,8 @@ void main(){
   vec2 pos = cr2(prow[0],prow[1],prow[2],prow[3],fv);
   vec3 col = cr3(crow[0],crow[1],crow[2],crow[3],fv);
 
-  // motion: flow the surface with time-varying noise. Fade the warp to zero
-  // at the (s,t) boundary so the mesh edge stays pinned to its designed
-  // outline and never exposes gaps at the frame edges.
-  float t = uTime;
-  float edge = smoothstep(0.0, 0.18, min(min(aST.x, 1.0-aST.x), min(aST.y, 1.0-aST.y)));
-  pos += (uWarp*0.06*edge) * vec2(
-    snoise(pos*uNoiseScale + vec2(0.0, t)),
-    snoise(pos*uNoiseScale + vec2(5.2, t+1.3))
-  );
-
+  // Pure bicubic evaluation — motion comes from the engine animating the
+  // 16 control points themselves (uCtrlPos), so the surface genuinely flexes.
   gl_Position = vec4(pos.x*2.0-1.0, 1.0-pos.y*2.0, 0.0, 1.0);
   vColor = col;
 }

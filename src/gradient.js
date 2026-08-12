@@ -118,7 +118,7 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
     throw new Error('Mesh program link error: ' + gl.getProgramInfoLog(meshProg));
   }
   const MU = {};
-  ['uCtrlPos', 'uCtrlColor', 'uTime', 'uWarp', 'uNoiseScale', 'uGrain'].forEach((n) => {
+  ['uCtrlPos', 'uCtrlColor', 'uTime', 'uGrain'].forEach((n) => {
     MU[n] = gl.getUniformLocation(meshProg, (n === 'uCtrlPos' || n === 'uCtrlColor') ? n + '[0]' : n);
   });
   const aST = gl.getAttribLocation(meshProg, 'aST');
@@ -177,13 +177,39 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
     else renderPoints();
   }
 
+  // Deterministic per-point phase hash (no Math.random — keeps renders stable).
+  function hash01(n) { const s = Math.sin(n) * 43758.5453; return s - Math.floor(s); }
+
   function renderMesh() {
     const a = config.animation, e = config.effects;
+    // The mesh animates by drifting the 16 control points themselves, so the
+    // bicubic surface genuinely flexes. Each point gets a two-band oscillator
+    // with hashed phases/frequencies. Border points may only slide ALONG their
+    // edge and corners stay pinned — the boundary curve of the surface depends
+    // solely on its border points, so frame edges stay exactly straight.
+    const t = time * a.noiseSpeed * 6.0;
+    const amp = a.warp * 0.05;
+    const fs = a.noiseScale;
     let mr = 0, mg = 0, mb = 0;
     for (let i = 0; i < 16; i++) {
       const p = config.points[i];
-      ctrlPosBuf[i * 2] = p.x;
-      ctrlPosBuf[i * 2 + 1] = p.y; // mesh vertex shader is y-down, like the UI
+      let dx = 0, dy = 0;
+      if (amp > 0) {
+        const f1 = fs * (0.8 + 0.5 * hash01(i * 12.99 + 1));
+        const f2 = fs * (1.7 + 0.9 * hash01(i * 12.99 + 2));
+        const f3 = fs * (0.9 + 0.5 * hash01(i * 12.99 + 3));
+        const f4 = fs * (1.5 + 0.9 * hash01(i * 12.99 + 4));
+        const P = 6.2832;
+        dx = amp * (0.65 * Math.sin(t * f1 + P * hash01(i * 78.23 + 1)) +
+                    0.35 * Math.sin(t * f2 + P * hash01(i * 78.23 + 2)));
+        dy = amp * (0.65 * Math.sin(t * f3 + P * hash01(i * 78.23 + 3)) +
+                    0.35 * Math.sin(t * f4 + P * hash01(i * 78.23 + 4)));
+        // pin motion perpendicular to any frame edge the point sits on
+        if (Math.abs(p.x) < 0.02 || Math.abs(p.x - 1) < 0.02) dx = 0;
+        if (Math.abs(p.y) < 0.02 || Math.abs(p.y - 1) < 0.02) dy = 0;
+      }
+      ctrlPosBuf[i * 2] = p.x + dx;
+      ctrlPosBuf[i * 2 + 1] = p.y + dy; // mesh vertex shader is y-down, like the UI
       const rgb = hexToRgb(p.color);
       ctrlColBuf[i * 3] = srgb2lin(rgb[0]);
       ctrlColBuf[i * 3 + 1] = srgb2lin(rgb[1]);
@@ -198,8 +224,6 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
     gl.uniform2fv(MU.uCtrlPos, ctrlPosBuf);
     gl.uniform3fv(MU.uCtrlColor, ctrlColBuf);
     gl.uniform1f(MU.uTime, time * a.noiseSpeed);
-    gl.uniform1f(MU.uWarp, a.warp);
-    gl.uniform1f(MU.uNoiseScale, a.noiseScale);
     gl.uniform1f(MU.uGrain, e.grain);
     // clear to the mean control color so any warp-exposed sliver isn't black
     gl.clearColor(mr / 16, mg / 16, mb / 16, 1);
