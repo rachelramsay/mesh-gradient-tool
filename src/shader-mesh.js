@@ -63,9 +63,12 @@ void main(){
   vec2 pos = cr2(prow[0],prow[1],prow[2],prow[3],fv);
   vec3 col = cr3(crow[0],crow[1],crow[2],crow[3],fv);
 
-  // motion: flow the whole surface with time-varying noise
+  // motion: flow the surface with time-varying noise. Fade the warp to zero
+  // at the (s,t) boundary so the mesh edge stays pinned to its designed
+  // outline and never exposes gaps at the frame edges.
   float t = uTime;
-  pos += (uWarp*0.06) * vec2(
+  float edge = smoothstep(0.0, 0.18, min(min(aST.x, 1.0-aST.x), min(aST.y, 1.0-aST.y)));
+  pos += (uWarp*0.06*edge) * vec2(
     snoise(pos*uNoiseScale + vec2(0.0, t)),
     snoise(pos*uNoiseScale + vec2(5.2, t+1.3))
   );
