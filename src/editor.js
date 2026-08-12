@@ -4,7 +4,7 @@
 import { initMeshGradient, MAX_POINTS, DEFAULT_CONFIG } from './gradient.js';
 import { el, slider } from './controls.js';
 import { deriveDark } from './color.js';
-import { figmaShaderToConfig, refineGridOrderByReference, configToFigmaShaderPaint } from './figma-import.js';
+import { figmaShaderToConfig, refineGridOrderByReference, configToFigmaShaderPaint, buildFigmaApplyScript } from './figma-import.js';
 import { downloadPNG } from './capture.js';
 import {
   PRESETS, configToJSON, parseConfigJSON,
@@ -362,6 +362,41 @@ function applyConfig(next) {
   syncPlayBtn();
 }
 
+// ------------------------------------------------------------------------ figma
+const figmaPanel = document.getElementById('figma-panel');
+
+function copyButton(label, getText) {
+  const btn = el('button', { class: 'btn', text: label });
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      const old = btn.textContent;
+      btn.textContent = '✓ Copied';
+      setTimeout(() => { btn.textContent = old; }, 1500);
+    } catch (err) {
+      alert('Copy failed: ' + err.message);
+    }
+  });
+  return btn;
+}
+
+function renderFigmaPanel() {
+  figmaPanel.innerHTML = '';
+  if (config.mode !== 'mesh' || config.points.length !== 16) {
+    figmaPanel.append(
+      el('div', { class: 'muted small', text: 'Native Figma export needs a 4×4 mesh design. Start from the "Figma Lattice" preset (or import a Figma mesh) — free-point designs can’t map onto Figma’s shader grid.' }),
+    );
+    return;
+  }
+  figmaPanel.append(
+    el('div', { class: 'row wrap' }, [
+      copyButton('Copy apply script', () => buildFigmaApplyScript(config)),
+      copyButton('Copy paint JSON', () => JSON.stringify(configToFigmaShaderPaint(config), null, 2)),
+    ]),
+    el('div', { class: 'muted small', text: 'Apply script: select the target frame in Figma desktop, open Plugins → Development → Console, paste, run. The gradient lands as a live editable mesh shader fill. Paint JSON: the raw shader paint, for plugins or an MCP-driven push.' }),
+  );
+}
+
 // ------------------------------------------------------------------------ export
 function download(filename, text, mime = 'text/plain') {
   const blob = new Blob([text], { type: mime });
@@ -407,6 +442,7 @@ function renderAll() {
   renderPointPanel();
   renderAnimPanel();
   renderFxPanel();
+  renderFigmaPanel();
 }
 refreshPresetOptions();
 renderAll();

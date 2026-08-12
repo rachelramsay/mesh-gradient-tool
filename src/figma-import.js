@@ -67,6 +67,23 @@ function recoverGridOrder(points) {
   return grid;
 }
 
+// A self-contained Plugin API snippet that applies the current mesh design to
+// whatever node is selected in Figma. Paste into the Figma desktop console
+// (Plugins → Development → Open Console) — no plugin install required.
+export function buildFigmaApplyScript(config) {
+  const paint = configToFigmaShaderPaint(config);
+  return `// Mesh gradient — select target frame(s) in Figma, then run this
+// in Plugins → Development → Open Console (Figma desktop app).
+(() => {
+  const paint = ${JSON.stringify(paint, null, 2)};
+  const sel = figma.currentPage.selection.filter((n) => 'fills' in n);
+  if (!sel.length) { figma.notify('Select a frame or shape first'); return; }
+  sel.forEach((n) => { n.fills = [paint]; });
+  figma.notify('Mesh gradient applied to ' + sel.length + ' layer(s)');
+})();
+`;
+}
+
 // Refine a recovered grid against a reference render of the actual Figma node.
 // The analytic recovery can mis-slot heavily dragged points (the hashed keys
 // destroy the labels, and distance heuristics can't see the truth). Rendering
