@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animated Mesh Gradient</title>
+<link rel="stylesheet" href="src/ui.css">
+</head>
+<body>
+<div class="app">
+  <!-- stage -->
+  <section class="stage-wrap">
+    <div class="toolbar">
+      <strong class="brand">Mesh Gradient</strong>
+      <span class="spacer"></span>
+      <button id="play" class="btn btn--primary">► Play</button>
+      <button id="reset" class="btn">↺ Reset</button>
+      <button id="capture" class="btn">⤓ Capture PNG</button>
+    </div>
+    <div id="stage" class="stage">
+      <div id="frame" class="frame">
+        <canvas id="canvas"></canvas>
+        <div id="handles" class="handles"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- panel -->
+  <aside class="panel">
+    <section class="group">
+      <h2>Canvas size</h2>
+      <div id="frame-panel"></div>
+    </section>
+
+    <section class="group">
+      <h2>Points &amp; colors</h2>
+      <div id="points-panel"></div>
+    </section>
+
+    <section class="group">
+      <h2>Animation</h2>
+      <div id="anim-panel"></div>
+    </section>
+
+    <section class="group">
+      <h2>Effects</h2>
+      <div id="fx-panel"></div>
+    </section>
+
+    <section class="group">
+      <h2>Presets</h2>
+      <div class="row">
+        <select id="preset-select" class="select"></select>
+        <button id="save-preset" class="btn">Save current</button>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Export</h2>
+      <div class="row wrap">
+        <button id="export-js" class="btn">Code (JS)</button>
+        <button id="export-html" class="btn">Demo (HTML)</button>
+        <button id="export-css" class="btn">CSS fallback</button>
+      </div>
+      <div class="row wrap">
+        <button id="export-json" class="btn btn--ghost">Save config</button>
+        <button id="import-json" class="btn btn--ghost">Load config</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p class="muted small">Figma export (snapshot &amp; native shader fill + light/dark variables) arrives in the next phase.</p>
+    </section>
+  </aside>
+</div>
+<script type="module" src="src/editor.js"></script>
+</body>
+</html>
