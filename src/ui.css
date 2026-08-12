@@ -154,6 +154,20 @@ input[type=color] {
   font-size: 13px; z-index: 10;
 }
 
+/* Figma panel: live-sync status + collapsed console fallback */
+.sync-status { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.sync-dot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); margin-top: 5px;
+}
+.sync-dot--on { background: #4ade80; }
+#figma-panel details summary {
+  cursor: pointer; font-size: 11px; color: var(--muted);
+  list-style-position: inside;
+}
+#figma-panel details summary:hover { color: var(--text); }
+#figma-panel details > div { margin-top: 6px; }
+
 /* paste area (Figma import) */
 .paste-area {
   width: 100%; resize: vertical; margin: 8px 0 0;

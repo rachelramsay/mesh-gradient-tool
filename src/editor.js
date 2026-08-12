@@ -386,7 +386,29 @@ function copyButton(label, getText) {
 }
 
 function renderFigmaPanel() {
+  const wasOpen = !!figmaPanel.querySelector('details[open]');
   figmaPanel.innerHTML = '';
+
+  // --- live sync: the primary path (Mesh Gradient Bridge plugin) -------------
+  const meshReady = config.mode === 'mesh' && config.points.length === 16;
+  figmaPanel.append(
+    el('div', { class: 'sync-status' }, [
+      el('span', { class: 'sync-dot' + (syncConnected ? ' sync-dot--on' : '') }),
+      el('span', { class: 'muted small', text: syncConnected
+        ? (meshReady
+          ? 'Live sync on — in Figma, open the Mesh Gradient Bridge plugin: Pull applies this design, Send imports a selection.'
+          : 'Live sync on — switch to a mesh design (Figma Lattice preset or an import) to make it pullable from Figma.')
+        : 'Live sync off — start the tool with "python3 serve.py 5599". Console scripts below still work.' }),
+    ]),
+  );
+
+  // --- console scripts: zero-setup fallback, collapsed by default ------------
+  const details = el('details', {}, [el('summary', { text: 'Console scripts (fallback, no plugin needed)' })]);
+  if (wasOpen) details.setAttribute('open', '');
+  figmaPanel.append(details);
+  const body = el('div', {});
+  details.append(body);
+  const panelAppend = (...nodes) => body.append(...nodes);
 
   // --- import: always available; how a design gets INTO mesh mode ------------
   const pasteArea = el('textarea', {
@@ -416,7 +438,7 @@ function renderFigmaPanel() {
       if (show) pasteArea.focus();
     },
   });
-  figmaPanel.append(
+  panelAppend(
     el('div', { class: 'row wrap' }, [
       copyButton('Copy read script', () => buildFigmaReadScript()),
       pasteToggle,
@@ -427,13 +449,13 @@ function renderFigmaPanel() {
   );
 
   // --- push: mesh mode only --------------------------------------------------
-  if (config.mode !== 'mesh' || config.points.length !== 16) {
-    figmaPanel.append(
+  if (!meshReady) {
+    panelAppend(
       el('div', { class: 'muted small', text: 'Native Figma export needs a 4×4 mesh design. Start from the "Figma Lattice" preset or import a mesh above — free-point designs can’t map onto Figma’s shader grid.' }),
     );
     return;
   }
-  figmaPanel.append(
+  panelAppend(
     el('div', { class: 'row wrap' }, [
       copyButton('Copy apply script', () => buildFigmaApplyScript(config)),
       copyButton('Copy paint JSON', () => JSON.stringify(configToFigmaShaderPaint(config), null, 2)),
@@ -496,6 +518,7 @@ function schedulePublish() {
   }, 400);
 }
 
+let syncConnected = false; // whether the dev server's sync relay is reachable
 let inboxSeq = null; // seeded on first poll so a stale item never auto-imports
 let syncBanner = null;
 function showSyncBanner(payload) {
@@ -523,15 +546,21 @@ function showSyncBanner(payload) {
 }
 
 async function pollInbox() {
+  let ok = false;
   try {
     const res = await fetch('/api/inbox' + (inboxSeq != null ? '?since=' + inboxSeq : ''));
     const data = await res.json();
-    if (inboxSeq === null) { inboxSeq = data.seq || 0; return; } // seed, don't import old items
-    if (data.payload && data.seq > inboxSeq) {
+    ok = typeof data.seq === 'number';
+    if (inboxSeq === null) { inboxSeq = data.seq || 0; } // seed, don't import old items
+    else if (data.payload && data.seq > inboxSeq) {
       inboxSeq = data.seq;
       showSyncBanner(data.payload);
     }
   } catch { /* sync server not available — fine */ }
+  if (ok !== syncConnected) {
+    syncConnected = ok;
+    renderFigmaPanel(); // reflect the status change
+  }
 }
 setInterval(pollInbox, 2500);
 pollInbox();
