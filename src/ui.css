@@ -143,6 +143,17 @@ input[type=color] {
 .muted { color: var(--muted); }
 .small { font-size: 11px; }
 
+/* live-sync banner (mesh received from the Figma plugin) */
+.sync-banner {
+  position: absolute;
+  top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 10px 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  font-size: 13px; z-index: 10;
+}
+
 /* paste area (Figma import) */
 .paste-area {
   width: 100%; resize: vertical; margin: 8px 0 0;

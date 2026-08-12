@@ -1,0 +1,67 @@
+<div style="font: 12px/1.5 -apple-system, system-ui, sans-serif; color: var(--figma-color-text); padding: 14px;">
+  <div style="font-weight: 600; margin-bottom: 2px;">Mesh Gradient Bridge</div>
+  <div style="color: var(--figma-color-text-secondary); margin-bottom: 12px;">
+    Live sync with the gradient tool (needs <code>serve.py</code> running).
+  </div>
+  <button id="pull" style="display:block; width:100%; margin-bottom:8px; padding:9px; border:0; border-radius:6px; background: var(--figma-color-bg-brand); color: var(--figma-color-text-onbrand); font-weight:600; cursor:pointer;">
+    ⬇ Pull from tool → apply to selection
+  </button>
+  <button id="send" style="display:block; width:100%; padding:9px; border:1px solid var(--figma-color-border); border-radius:6px; background: var(--figma-color-bg-secondary); color: var(--figma-color-text); font-weight:600; cursor:pointer;">
+    ⬆ Send selection to tool
+  </button>
+  <div id="status" style="margin-top:10px; min-height:32px; color: var(--figma-color-text-secondary);"></div>
+</div>
+<script>
+const BASES = ['http://127.0.0.1:5599', 'http://localhost:5599'];
+const statusEl = document.getElementById('status');
+const setStatus = (text, isError) => {
+  statusEl.textContent = text;
+  statusEl.style.color = isError ? 'var(--figma-color-text-danger)' : 'var(--figma-color-text-secondary)';
+};
+
+async function api(path, options) {
+  let lastErr;
+  for (const base of BASES) {
+    try {
+      const res = await fetch(base + path, options);
+      return await res.json();
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error('Tool server not reachable — run "python3 serve.py 5599" in the tool folder. (' + lastErr.message + ')');
+}
+
+document.getElementById('pull').onclick = async () => {
+  setStatus('Pulling…');
+  try {
+    const data = await api('/api/design');
+    const paint = data && data.payload && data.payload.paint;
+    if (!paint) {
+      setStatus(data.error || 'Tool has no mesh design yet — open it and use a mesh preset (e.g. Figma Lattice).', true);
+      return;
+    }
+    parent.postMessage({ pluginMessage: { type: 'apply-paint', paint } }, '*');
+  } catch (e) { setStatus(e.message, true); }
+};
+
+document.getElementById('send').onclick = () => {
+  setStatus('Reading selection…');
+  parent.postMessage({ pluginMessage: { type: 'read-selection' } }, '*');
+};
+
+window.onmessage = async (event) => {
+  const msg = event.data.pluginMessage;
+  if (!msg) return;
+  if (msg.type === 'status') {
+    setStatus(msg.error || msg.ok, !!msg.error);
+  } else if (msg.type === 'selection-data') {
+    try {
+      await api('/api/inbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg.payload),
+      });
+      setStatus('Sent — an import banner appears in the tool.');
+    } catch (e) { setStatus(e.message, true); }
+  }
+};
+</script>

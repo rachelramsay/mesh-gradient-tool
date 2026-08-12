@@ -27,6 +27,25 @@ python3 serve.py 5599
 
 Then open <http://localhost:5599/index.html>.
 
+## Figma live sync (no console needed)
+
+`figma-plugin/` is a local Figma plugin that syncs designs with the running
+tool directly. One-time install in the Figma **desktop** app:
+
+1. Menu → **Plugins → Development → Import plugin from manifest…**
+2. Pick `figma-plugin/manifest.json`
+
+Then, with the tool running (`python3 serve.py 5599`), open the plugin
+(Plugins → Development → Mesh Gradient Bridge):
+
+- **Pull from tool** — applies the tool's current mesh design to the selected
+  frame as a live, editable mesh gradient fill
+- **Send selection to tool** — reads the selected layer's mesh gradient; an
+  import banner appears in the tool
+
+The Figma panel inside the tool also offers clipboard-based console scripts as
+a fallback that needs no plugin or server.
+
 ## Use the exported runtime
 
 Export **Code (JS)** from the editor and drop it in:

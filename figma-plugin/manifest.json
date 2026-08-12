@@ -1,0 +1,11 @@
+{
+  "name": "Mesh Gradient Bridge",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["http://127.0.0.1:5599", "http://localhost:5599"],
+    "reasoning": "Live-syncs designs with the local mesh gradient tool dev server (serve.py)."
+  }
+}

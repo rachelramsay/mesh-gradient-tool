@@ -46,6 +46,7 @@ function pushConfig() {
   const points = config.points.map((p) => ({ x: p.x, y: p.y, spread: p.spread, color: pointColor(p) }));
   gradient.setConfig({ mode: config.mode || 'points', points, animation: config.animation, effects: config.effects });
   if (!gradient.isPlaying()) gradient.redraw();
+  schedulePublish();
 }
 
 function applyMode(m) {
@@ -363,6 +364,7 @@ function applyConfig(next) {
   gradient.setConfig(config);
   renderAll();
   syncPlayBtn();
+  schedulePublish();
 }
 
 // ------------------------------------------------------------------------ figma
@@ -477,6 +479,63 @@ document.getElementById('export-html').addEventListener('click', async () => {
 document.getElementById('export-css').addEventListener('click', () =>
   download('mesh-gradient.css', buildCSSFallback(gradient.getConfig()), 'text/css'));
 
+// ---------------------------------------------------------------- figma live sync
+// Publishes the current design to the dev server (the Figma plugin's "Pull
+// from tool" reads it) and polls the inbox for meshes sent from the plugin.
+let publishTimer = null;
+function schedulePublish() {
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(() => {
+    let paint = null;
+    try { paint = configToFigmaShaderPaint(config); } catch { /* not mesh mode */ }
+    fetch('/api/design', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paint, frame: config.frame }),
+    }).catch(() => {}); // server may be a plain static host — sync is optional
+  }, 400);
+}
+
+let inboxSeq = null; // seeded on first poll so a stale item never auto-imports
+let syncBanner = null;
+function showSyncBanner(payload) {
+  if (syncBanner) syncBanner.remove();
+  syncBanner = el('div', { class: 'sync-banner' }, [
+    el('span', { text: 'Mesh received from Figma' }),
+    el('button', {
+      class: 'btn btn--primary', text: 'Import',
+      onclick: () => {
+        try {
+          window.meshGradientEditor.importFigmaShader(payload.properties, {
+            width: payload.width || config.frame.width,
+            height: payload.height || config.frame.height,
+          });
+        } catch (err) { alert('Import failed: ' + err.message); }
+        syncBanner.remove(); syncBanner = null;
+      },
+    }),
+    el('button', {
+      class: 'btn btn--ghost', text: 'Dismiss',
+      onclick: () => { syncBanner.remove(); syncBanner = null; },
+    }),
+  ]);
+  stage.appendChild(syncBanner);
+}
+
+async function pollInbox() {
+  try {
+    const res = await fetch('/api/inbox' + (inboxSeq != null ? '?since=' + inboxSeq : ''));
+    const data = await res.json();
+    if (inboxSeq === null) { inboxSeq = data.seq || 0; return; } // seed, don't import old items
+    if (data.payload && data.seq > inboxSeq) {
+      inboxSeq = data.seq;
+      showSyncBanner(data.payload);
+    }
+  } catch { /* sync server not available — fine */ }
+}
+setInterval(pollInbox, 2500);
+pollInbox();
+
 // --------------------------------------------------------------------------- init
 function renderAll() {
   renderFramePanel();
@@ -490,6 +549,7 @@ function renderAll() {
 refreshPresetOptions();
 renderAll();
 syncPlayBtn();
+schedulePublish();
 
 // Expose the current design for the Figma integration (config + palette + PNG).
 window.meshGradientEditor = {
