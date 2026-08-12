@@ -491,13 +491,19 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 });
 
 document.getElementById('preview-export').addEventListener('click', async () => {
+  // Open the tab synchronously inside the click gesture (popup blockers block
+  // async window.open), then navigate it once the export is built.
+  const tab = window.open('about:blank', '_blank');
+  if (!tab) { alert('Pop-up blocked — allow pop-ups for this page, or use "HTML file · full page".'); return; }
   try {
     const html = await buildStandaloneHTML(gradient.getConfig());
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    const tab = window.open(url, '_blank');
-    if (!tab) alert('Pop-up blocked — allow pop-ups for this page, or use "HTML file · full page".');
+    tab.location = url;
     setTimeout(() => URL.revokeObjectURL(url), 30000);
-  } catch (err) { alert('Preview failed: ' + err.message); }
+  } catch (err) {
+    tab.close();
+    alert('Preview failed: ' + err.message);
+  }
 });
 document.getElementById('export-js').addEventListener('click', async () => {
   try { download('mesh-gradient.js', await buildStandaloneJS(gradient.getConfig()), 'text/javascript'); }

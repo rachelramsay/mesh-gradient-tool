@@ -171,7 +171,9 @@ ${body}
 
 // A ready-to-open HTML demo wrapping the standalone JS.
 export async function buildStandaloneHTML(config, base = './') {
-  const js = await buildStandaloneJS(config, base);
+  // Escape </script> sequences (e.g. in the usage comment) — the HTML parser
+  // would otherwise terminate the inline script block at the first one.
+  const js = (await buildStandaloneJS(config, base)).replace(/<\/script/gi, '<\\/script');
   return `<!doctype html>
 <html lang="en">
 <head>
