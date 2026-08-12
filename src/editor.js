@@ -3,6 +3,8 @@
 
 import { initMeshGradient, MAX_POINTS, DEFAULT_CONFIG } from './gradient.js';
 import { el, slider } from './controls.js';
+import { deriveDark } from './color.js';
+import { figmaShaderToConfig } from './figma-import.js';
 import { downloadPNG } from './capture.js';
 import {
   PRESETS, configToJSON, parseConfigJSON,
@@ -29,11 +31,27 @@ const handleLayer = document.getElementById('handles');
 const gradient = initMeshGradient(canvas, {}, { pauseWhenHidden: false, autoStart: true });
 let config = gradient.getConfig();
 let selected = 0;
+let mode = 'light'; // 'light' | 'dark' — which palette the editor previews/edits
+
+// Each point stores a light `color` and an optional `darkColor` override;
+// when absent, the dark value is derived perceptually from the light color.
+function resolveDark(p) { return p.darkColor || deriveDark(p.color); }
+function pointColor(p) { return mode === 'dark' ? resolveDark(p) : p.color; }
 
 // ---------------------------------------------------------------- point handles
 function pushConfig() {
-  gradient.setConfig({ points: config.points, animation: config.animation, effects: config.effects });
+  const points = config.points.map((p) => ({ x: p.x, y: p.y, spread: p.spread, color: pointColor(p) }));
+  gradient.setConfig({ points, animation: config.animation, effects: config.effects });
   if (!gradient.isPlaying()) gradient.redraw();
+}
+
+function applyMode(m) {
+  mode = m === 'dark' ? 'dark' : 'light';
+  const btn = document.getElementById('mode');
+  if (btn) btn.textContent = mode === 'dark' ? '◑ Dark' : '◐ Light';
+  renderHandles();
+  renderPointPanel();
+  pushConfig();
 }
 
 // Map a point's spread to a handle diameter (px) so the dot reflects its reach.
@@ -49,7 +67,7 @@ function renderHandles() {
     const sz = handleSize(p.spread);
     const h = el('button', {
       class: 'handle' + (i === selected ? ' handle--active' : ''),
-      style: `left:${p.x * 100}%;top:${p.y * 100}%;width:${sz}px;height:${sz}px;--c:${p.color}`,
+      style: `left:${p.x * 100}%;top:${p.y * 100}%;width:${sz}px;height:${sz}px;--c:${pointColor(p)}`,
       title: `Point ${i + 1}`,
       'aria-label': `Point ${i + 1}`,
     });
@@ -168,17 +186,26 @@ function renderPointPanel() {
     config.points.map((pt, i) =>
       el('button', {
         class: 'swatch' + (i === selected ? ' swatch--active' : ''),
-        style: `--c:${pt.color}`,
+        style: `--c:${pointColor(pt)}`,
         title: `Point ${i + 1}`,
         onclick: () => selectPoint(i),
       })
     )
   );
 
-  const color = el('input', {
+  const lightInput = el('input', {
     type: 'color', value: p.color,
     oninput: (e) => { config.points[selected].color = e.target.value; renderHandles(); renderPointPanel(); pushConfig(); },
   });
+  const overridden = p.darkColor != null;
+  const darkInput = el('input', {
+    type: 'color', value: resolveDark(p),
+    oninput: (e) => { config.points[selected].darkColor = e.target.value; renderHandles(); renderPointPanel(); pushConfig(); },
+  });
+  const darkTag = overridden
+    ? el('button', { class: 'btn btn--ghost small', text: 'auto', title: 'Reset dark to auto-derived',
+        onclick: () => { delete config.points[selected].darkColor; renderHandles(); renderPointPanel(); pushConfig(); } })
+    : el('span', { class: 'muted small', text: 'auto' });
 
   const spreadCtl = slider({
     label: 'Spread', min: 0.2, max: 3, step: 0.01,
@@ -214,7 +241,8 @@ function renderPointPanel() {
 
   pointsPanel.append(
     swatches,
-    el('div', { class: 'row' }, [el('span', { class: 'muted', text: `Point ${selected + 1} color` }), color]),
+    el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Light' }), lightInput]),
+    el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Dark' }), darkInput, darkTag]),
     spreadCtl.row,
     el('div', { class: 'row' }, [addBtn, delBtn]),
     el('div', { class: 'muted small', text: `${config.points.length}/${MAX_POINTS} points · drag dots on the canvas to move` }),
@@ -274,6 +302,7 @@ document.getElementById('capture').addEventListener('click', () => {
   downloadPNG(gradient, 'mesh-gradient.png', config.frame.width, config.frame.height);
   syncPlayBtn();
 });
+document.getElementById('mode').addEventListener('click', () => applyMode(mode === 'dark' ? 'light' : 'dark'));
 
 // ----------------------------------------------------------------------- presets
 const presetSel = document.getElementById('preset-select');
@@ -372,3 +401,20 @@ function renderAll() {
 refreshPresetOptions();
 renderAll();
 syncPlayBtn();
+
+// Expose the current design for the Figma integration (config + palette + PNG).
+window.meshGradientEditor = {
+  getConfig: () => JSON.parse(JSON.stringify(config)),
+  // Resolved light + dark hex per point — feeds the Figma Light/Dark variables.
+  getPalette: () => config.points.map((p, i) => ({ index: i + 1, light: p.color, dark: resolveDark(p) })),
+  getMode: () => mode,
+  setMode: (m) => applyMode(m),
+  capturePNG: (w, h) => gradient.captureDataURL(w || config.frame.width, h || config.frame.height),
+  // Import a Figma "Mesh gradient" SHADER fill's raw `properties` object.
+  importFigmaShader: (properties, opts) => {
+    applyMode('light');
+    applyConfig(figmaShaderToConfig(properties, opts));
+    pushConfig();
+    return config.points.length;
+  },
+};
