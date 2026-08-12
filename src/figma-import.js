@@ -84,6 +84,35 @@ export function buildFigmaApplyScript(config) {
 `;
 }
 
+// The read-side counterpart of the apply script: run in the Figma desktop
+// console with a meshed layer selected, it copies the shader fill's data as
+// JSON (devtools' copy() builtin) for pasting into the tool's import box.
+export function buildFigmaReadScript() {
+  return `// Mesh gradient import — select the layer with the mesh shader fill,
+// then run this in Plugins → Development → Open Console (Figma desktop).
+(() => {
+  const n = figma.currentPage.selection[0];
+  const f = n && 'fills' in n && Array.from(n.fills).find((x) => x.type === 'SHADER');
+  if (!f) { figma.notify('Select a layer with a mesh gradient fill first'); return; }
+  const json = JSON.stringify({ width: n.width, height: n.height, properties: f.properties });
+  try { copy(json); figma.notify('Mesh copied — paste it into the gradient tool'); }
+  catch (e) { console.log(json); figma.notify('copy() unavailable — copy the JSON logged below'); }
+})();
+`;
+}
+
+// Accept the JSON shapes a user might paste: the read-script output
+// ({width,height,properties}), a full SHADER paint ({type,properties}), or a
+// bare properties map. Returns { properties, width, height }.
+export function parseFigmaMeshJSON(text) {
+  const obj = JSON.parse(text);
+  const properties = obj.properties || obj;
+  const pointCount = Object.values(properties)
+    .filter((v) => v && typeof v === 'object' && typeof v.x === 'number' && v.color).length;
+  if (pointCount < 2) throw new Error('No mesh color points found — paste the JSON copied by the Figma read script.');
+  return { properties, width: obj.width, height: obj.height };
+}
+
 // Refine a recovered grid against a reference render of the actual Figma node.
 // The analytic recovery can mis-slot heavily dragged points (the hashed keys
 // destroy the labels, and distance heuristics can't see the truth). Rendering

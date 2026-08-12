@@ -4,7 +4,10 @@
 import { initMeshGradient, MAX_POINTS, DEFAULT_CONFIG } from './gradient.js';
 import { el, slider } from './controls.js';
 import { deriveDark } from './color.js';
-import { figmaShaderToConfig, refineGridOrderByReference, configToFigmaShaderPaint, buildFigmaApplyScript } from './figma-import.js';
+import {
+  figmaShaderToConfig, refineGridOrderByReference, configToFigmaShaderPaint,
+  buildFigmaApplyScript, buildFigmaReadScript, parseFigmaMeshJSON,
+} from './figma-import.js?v=6';
 import { downloadPNG } from './capture.js';
 import {
   PRESETS, configToJSON, parseConfigJSON,
@@ -382,9 +385,49 @@ function copyButton(label, getText) {
 
 function renderFigmaPanel() {
   figmaPanel.innerHTML = '';
+
+  // --- import: always available; how a design gets INTO mesh mode ------------
+  const pasteArea = el('textarea', {
+    class: 'paste-area', rows: '4', hidden: '',
+    placeholder: 'Paste the JSON copied by the read script…',
+  });
+  const importBtn = el('button', {
+    class: 'btn btn--primary', hidden: '', text: 'Import',
+    onclick: () => {
+      try {
+        const { properties, width, height } = parseFigmaMeshJSON(pasteArea.value);
+        window.meshGradientEditor.importFigmaShader(properties, {
+          width: width || config.frame.width,
+          height: height || config.frame.height,
+        });
+      } catch (err) {
+        alert('Import failed: ' + err.message);
+      }
+    },
+  });
+  const pasteToggle = el('button', {
+    class: 'btn', text: 'Paste mesh JSON…',
+    onclick: () => {
+      const show = pasteArea.hidden;
+      pasteArea.hidden = !show;
+      importBtn.hidden = !show;
+      if (show) pasteArea.focus();
+    },
+  });
+  figmaPanel.append(
+    el('div', { class: 'row wrap' }, [
+      copyButton('Copy read script', () => buildFigmaReadScript()),
+      pasteToggle,
+    ]),
+    pasteArea,
+    el('div', { class: 'row' }, [importBtn]),
+    el('div', { class: 'muted small', text: 'Import: select the meshed layer in Figma desktop, run the read script in Plugins → Development → Console (it copies the mesh as JSON), then paste it here.' }),
+  );
+
+  // --- push: mesh mode only --------------------------------------------------
   if (config.mode !== 'mesh' || config.points.length !== 16) {
     figmaPanel.append(
-      el('div', { class: 'muted small', text: 'Native Figma export needs a 4×4 mesh design. Start from the "Figma Lattice" preset (or import a Figma mesh) — free-point designs can’t map onto Figma’s shader grid.' }),
+      el('div', { class: 'muted small', text: 'Native Figma export needs a 4×4 mesh design. Start from the "Figma Lattice" preset or import a mesh above — free-point designs can’t map onto Figma’s shader grid.' }),
     );
     return;
   }
@@ -393,7 +436,7 @@ function renderFigmaPanel() {
       copyButton('Copy apply script', () => buildFigmaApplyScript(config)),
       copyButton('Copy paint JSON', () => JSON.stringify(configToFigmaShaderPaint(config), null, 2)),
     ]),
-    el('div', { class: 'muted small', text: 'Apply script: select the target frame in Figma desktop, open Plugins → Development → Console, paste, run. The gradient lands as a live editable mesh shader fill. Paint JSON: the raw shader paint, for plugins or an MCP-driven push.' }),
+    el('div', { class: 'muted small', text: 'Push: select the target frame in Figma desktop, run the apply script in the console — the gradient lands as a live editable mesh shader fill. Paint JSON is the raw shader paint, for plugins or an MCP-driven push.' }),
   );
 }
 

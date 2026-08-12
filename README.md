@@ -18,10 +18,11 @@ A lightweight editor for creating **animated mesh gradients** — design them in
 
 ## Run locally
 
-The app uses ES modules, so serve it over HTTP (not `file://`):
+The app uses ES modules, so serve it over HTTP (not `file://`). The bundled
+dev server disables caching so edits show up on plain reload:
 
 ```bash
-python3 -m http.server 5599
+python3 serve.py 5599
 ```
 
 Then open <http://localhost:5599/index.html>.

@@ -143,6 +143,15 @@ input[type=color] {
 .muted { color: var(--muted); }
 .small { font-size: 11px; }
 
+/* paste area (Figma import) */
+.paste-area {
+  width: 100%; resize: vertical; margin: 8px 0 0;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.paste-area::placeholder { color: var(--muted); }
+
 /* number fields (canvas size) */
 .num-field { display: flex; align-items: center; gap: 6px; flex: 1; }
 .num {
