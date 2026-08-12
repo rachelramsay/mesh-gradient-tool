@@ -196,14 +196,15 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
       let dx = 0, dy = 0;
       if (amp > 0) {
         const f1 = fs * (0.8 + 0.5 * hash01(i * 12.99 + 1));
-        const f2 = fs * (1.7 + 0.9 * hash01(i * 12.99 + 2));
         const f3 = fs * (0.9 + 0.5 * hash01(i * 12.99 + 3));
-        const f4 = fs * (1.5 + 0.9 * hash01(i * 12.99 + 4));
         const P = 6.2832;
-        dx = amp * (0.65 * Math.sin(t * f1 + P * hash01(i * 78.23 + 1)) +
-                    0.35 * Math.sin(t * f2 + P * hash01(i * 78.23 + 2)));
-        dy = amp * (0.65 * Math.sin(t * f3 + P * hash01(i * 78.23 + 3)) +
-                    0.35 * Math.sin(t * f4 + P * hash01(i * 78.23 + 4)));
+        // constant-velocity orbit (alternating direction) + a slower breathing
+        // oscillation. The orbit's uniform angular motion makes the animation
+        // tempo — and thus the Speed control — clearly readable.
+        const dir = (i % 2 === 0) ? 1 : -1;
+        const orb = dir * t * fs * (0.9 + 0.7 * hash01(i * 3.7 + 5)) + P * hash01(i * 3.7 + 6);
+        dx = amp * (0.5 * Math.sin(t * f1 + P * hash01(i * 78.23 + 1)) + 0.5 * Math.cos(orb));
+        dy = amp * (0.5 * Math.sin(t * f3 + P * hash01(i * 78.23 + 3)) + 0.5 * Math.sin(orb));
         // pin motion perpendicular to any frame edge the point sits on
         if (Math.abs(p.x) < 0.02 || Math.abs(p.x - 1) < 0.02) dx = 0;
         if (Math.abs(p.y) < 0.02 || Math.abs(p.y - 1) < 0.02) dy = 0;
