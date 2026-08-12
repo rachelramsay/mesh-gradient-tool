@@ -187,8 +187,8 @@ export function initMeshGradient(canvas, userConfig = {}, options = {}) {
     // with hashed phases/frequencies. Border points may only slide ALONG their
     // edge and corners stay pinned — the boundary curve of the surface depends
     // solely on its border points, so frame edges stay exactly straight.
-    const t = time * a.noiseSpeed * 6.0;
-    const amp = a.warp * 0.05;
+    const t = time * a.noiseSpeed * 10.0;
+    const amp = a.warp * 0.14;
     const fs = a.noiseScale;
     let mr = 0, mg = 0, mb = 0;
     for (let i = 0; i < 16; i++) {

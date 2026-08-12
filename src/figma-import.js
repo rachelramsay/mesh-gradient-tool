@@ -204,8 +204,8 @@ export function figmaShaderToConfig(properties, opts = {}) {
   return {
     mode: isMesh ? 'mesh' : 'points',
     points: ordered,
-    // Start close to the (static) Figma look; motion is there to dial up.
-    animation: { play: true, speed: 0.6, noiseScale: 1.2, noiseSpeed: 0.08, warp: 0.3 },
+    // Arrive animated: gentle but clearly alive; sliders dial it from there.
+    animation: { play: true, speed: 0.6, noiseScale: 1.2, noiseSpeed: 0.08, warp: 0.5 },
     effects: { falloff: 1.0, grain: 0, vignette: 0 },
     frame: { width, height },
   };
