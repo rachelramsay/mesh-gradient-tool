@@ -64,8 +64,11 @@
     <section class="group">
       <h2>Export</h2>
       <div class="row wrap">
-        <button id="export-js" class="btn">Code (JS)</button>
-        <button id="export-html" class="btn">Demo (HTML)</button>
+        <button id="preview-export" class="btn btn--primary">► Preview in tab</button>
+      </div>
+      <div class="row wrap">
+        <button id="export-js" class="btn">JS file · drop-in</button>
+        <button id="export-html" class="btn">HTML file · full page</button>
         <button id="export-css" class="btn">CSS fallback</button>
       </div>
       <div class="row wrap">
@@ -73,6 +76,7 @@
         <button id="import-json" class="btn btn--ghost">Load config</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden>
       </div>
+      <p class="muted small">Preview opens the exported page instantly — nothing to combine. The JS file drops into any page with <code>&lt;canvas id="gradient"&gt;</code>; the HTML file is that same page, complete.</p>
     </section>
   </aside>
 </div>
