@@ -7,6 +7,36 @@ figma.showUI(__html__, { width: 380, height: 610, themeColors: true });
 
 const PRESET_KEY = 'mesh-gradient.presets';
 const SHADER_MAP_KEY = 'mesh-gradient.shader-map';
+const VAR_LINK_KEY = 'mesh-gradient.linked-collection';
+
+// Pick a collection's Light/Dark modes by name, falling back to mode order.
+function lightDarkModes(col) {
+  const light = col.modes.find((m) => /light/i.test(m.name)) || col.modes[0];
+  const dark = col.modes.find((m) => /dark/i.test(m.name)) || col.modes[1] || col.modes[0];
+  return { light, dark };
+}
+
+// Resolve a variable's COLOR value for a mode, following aliases across
+// collections (matching mode by name at each hop).
+async function resolveColor(variable, modeKind, depth) {
+  if (!variable || (depth || 0) > 8) return null;
+  const col = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+  if (!col) return null;
+  const mode = lightDarkModes(col)[modeKind];
+  const value = variable.valuesByMode[mode.modeId];
+  if (value && value.type === 'VARIABLE_ALIAS') {
+    const next = await figma.variables.getVariableByIdAsync(value.id);
+    return resolveColor(next, modeKind, (depth || 0) + 1);
+  }
+  if (value && typeof value.r === 'number') return { r: value.r, g: value.g, b: value.b };
+  return null;
+}
+
+// A collection's COLOR variables, in collection order.
+async function colorVariablesOf(col) {
+  const vars = await Promise.all(col.variableIds.map((id) => figma.variables.getVariableByIdAsync(id)));
+  return vars.filter((v) => v && v.resolvedType === 'COLOR');
+}
 
 function reply(msg) { figma.ui.postMessage(msg); }
 function status(ok, error) { reply({ type: 'status', ok, error }); }
@@ -28,6 +58,36 @@ figma.ui.onmessage = async (msg) => {
 
   } else if (msg.type === 'save-presets') {
     await figma.clientStorage.setAsync(PRESET_KEY, msg.presets || {});
+
+  // ---- variable collection link --------------------------------------------
+  } else if (msg.type === 'get-collections') {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const list = [];
+    for (const col of collections) {
+      const colorVars = await colorVariablesOf(col);
+      if (colorVars.length) list.push({ id: col.id, name: col.name, colorCount: colorVars.length });
+    }
+    const linkedId = (await figma.clientStorage.getAsync(VAR_LINK_KEY)) || null;
+    reply({ type: 'collections', list, linkedId });
+
+  } else if (msg.type === 'link-collection') {
+    await figma.clientStorage.setAsync(VAR_LINK_KEY, msg.collectionId || null);
+
+  } else if (msg.type === 'pull-variables') {
+    const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
+    const col = linkedId && await figma.variables.getVariableCollectionByIdAsync(linkedId);
+    if (!col) return status(null, 'Linked collection not found — pick one again.');
+    const colorVars = await colorVariablesOf(col);
+    if (!colorVars.length) return status(null, 'No color variables in that collection.');
+    const palette = [];
+    for (const v of colorVars.slice(0, 16)) {
+      palette.push({
+        name: v.name,
+        light: await resolveColor(v, 'light'),
+        dark: await resolveColor(v, 'dark'),
+      });
+    }
+    reply({ type: 'variables-pulled', palette });
 
   // ---- custom shader targeting ---------------------------------------------
   } else if (msg.type === 'get-shader-map') {
@@ -99,31 +159,41 @@ figma.ui.onmessage = async (msg) => {
       status(null, 'Image fill failed: ' + e.message);
     }
 
-  // ---- create/update the Light/Dark variable collection ---------------------
+  // ---- create/update Light/Dark variables ----------------------------------
+  // Writes to the LINKED collection when one is set (index-mapped onto its
+  // color variables, creating extras if it has fewer than the palette).
+  // With no link, creates/updates a local "Mesh Gradient" collection.
   } else if (msg.type === 'make-variables') {
     try {
-      const collections = await figma.variables.getLocalVariableCollectionsAsync();
-      let col = collections.find((c) => c.name === 'Mesh Gradient');
+      let col = null;
+      const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
+      if (linkedId) col = await figma.variables.getVariableCollectionByIdAsync(linkedId);
       if (!col) {
-        col = figma.variables.createVariableCollection('Mesh Gradient');
-        col.renameMode(col.modes[0].modeId, 'Light');
-        col.addMode('Dark');
+        const collections = await figma.variables.getLocalVariableCollectionsAsync();
+        col = collections.find((c) => c.name === 'Mesh Gradient');
+        if (!col) {
+          col = figma.variables.createVariableCollection('Mesh Gradient');
+          col.renameMode(col.modes[0].modeId, 'Light');
+          col.addMode('Dark');
+        }
       }
-      const lightId = col.modes[0].modeId;
-      const darkId = (col.modes[1] || col.modes[0]).modeId;
-      const existing = {};
-      for (const id of col.variableIds) {
-        const v = await figma.variables.getVariableByIdAsync(id);
-        if (v) existing[v.name] = v;
+      const modes = lightDarkModes(col);
+      if (modes.light.modeId === modes.dark.modeId && col.modes.length === 1) {
+        try { modes.dark = { modeId: col.addMode('Dark'), name: 'Dark' }; } catch (e) { /* mode limit */ }
       }
-      for (const item of msg.palette) {
-        const v = existing[item.name] || figma.variables.createVariable(item.name, col, 'COLOR');
-        v.scopes = ['FRAME_FILL', 'SHAPE_FILL'];
-        v.setValueForMode(lightId, hexToRgba(item.light));
-        v.setValueForMode(darkId, hexToRgba(item.dark));
+      const colorVars = await colorVariablesOf(col);
+      for (let i = 0; i < msg.palette.length; i++) {
+        const item = msg.palette[i];
+        let v = colorVars[i];
+        if (!v) {
+          v = figma.variables.createVariable(item.name, col, 'COLOR');
+          v.scopes = ['FRAME_FILL', 'SHAPE_FILL'];
+        }
+        v.setValueForMode(modes.light.modeId, hexToRgba(item.light));
+        if (modes.dark.modeId !== modes.light.modeId) v.setValueForMode(modes.dark.modeId, hexToRgba(item.dark));
       }
-      figma.notify('Mesh Gradient variables updated (' + msg.palette.length + ')');
-      status('Variables ready: ' + msg.palette.length + ' colors × Light/Dark.');
+      figma.notify('Variables updated in "' + col.name + '" (' + msg.palette.length + ')');
+      status('Pushed ' + msg.palette.length + ' colors × Light/Dark to "' + col.name + '".');
     } catch (e) {
       status(null, 'Variables failed: ' + e.message);
     }

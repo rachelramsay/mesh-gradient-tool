@@ -257,6 +257,20 @@ $('mkvars').onclick = () => {
   post({ type: 'make-variables', palette });
 };
 
+// ---- variable collection link: pull/push point colors from Figma variables --
+$('varcol').onchange = () => {
+  const id = $('varcol').value;
+  if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);
+  post({ type: 'link-collection', collectionId: id || null });
+  setStatus(id ? 'Collection linked — Pull colors to load it, Push to write to it.' : 'Variables unlinked.');
+};
+$('pullvars').onclick = () => {
+  if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);
+  if (!$('varcol').value) return setStatus('Link a variable collection first.', true);
+  setStatus('Resolving variables…');
+  post({ type: 'pull-variables' });
+};
+
 // ---- web tool sync (optional — needs serve.py running) ----------------------
 const WEB_BASE = 'http://localhost:5599';
 $('pullweb').onclick = async () => {
@@ -338,6 +352,27 @@ window.onmessage = async (event) => {
     customShaderMap = msg.map || null;
     updateShaderTarget();
 
+  } else if (msg.type === 'collections') {
+    const sel = $('varcol');
+    sel.innerHTML = '<option value="">Variables: not linked</option>';
+    for (const c of msg.list) {
+      sel.add(new Option(c.name + ' (' + c.colorCount + ' colors)', c.id));
+    }
+    if (msg.linkedId) sel.value = msg.linkedId;
+
+  } else if (msg.type === 'variables-pulled') {
+    // index-mapped: first N color variables -> mesh points, light+dark resolved
+    const n = Math.min(msg.palette.length, config.points.length);
+    for (let i = 0; i < n; i++) {
+      const v = msg.palette[i];
+      if (v.light) config.points[i].color = rgb01ToHex(v.light.r, v.light.g, v.light.b);
+      if (v.dark) config.points[i].darkColor = rgb01ToHex(v.dark.r, v.dark.g, v.dark.b);
+    }
+    renderPoints();
+    pushCfg();
+    setStatus('Pulled ' + n + ' colors from variables (' +
+      (msg.palette.length < config.points.length ? 'collection has fewer colors than points' : 'Light + Dark') + ').');
+
   } else if (msg.type === 'shader-captured') {
     const map = deriveShaderMap(msg.id, msg.properties);
     if (!map) {
@@ -390,4 +425,5 @@ renderPresets();
 updateShaderTarget();
 post({ type: 'get-presets' });
 post({ type: 'get-shader-map' });
+post({ type: 'get-collections' });
 if (!IN_FIGMA) setStatus('Browser test mode — Figma actions disabled.');

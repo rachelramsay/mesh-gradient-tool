@@ -1,11 +1,26 @@
 # Animated mesh gradient — your own custom Figma shader
 
+> **Status (verified 2026-08-13): Figma's shader build system rejects
+> user-authored shaders that read `frame.time` / `frame.deltaTime`, so the
+> animated version in `main.ts` does NOT build as-is.** Live animation in
+> custom shader fills is currently a first-party-only capability (e.g. the
+> stock "Glowing wave"). `main.ts` is kept as the intended port in case the
+> platform opens this up. Figma's shader builder will happily produce the
+> **static** variant (16 bicubic points + tessellation) from this source —
+> that static build works with the plugin's "Use selection's shader for
+> Apply" capture, since it keeps the default lattice and unique defaults.
+>
+> Animation paths that DO work today: the web tool / plugin preview and code
+> exports (true animation), paused-frame image fills via the plugin, and
+> hand-keyframing the shader's 16 points in Figma's Motion mode (the Plugin
+> API cannot automate shader-property keyframes — its keyframe allowlist
+> covers transforms/opacity/solid fills/effects only).
+
 This folder is a custom Figma shader fill: the same 4×4 bicubic mesh as
-Figma's stock mesh gradient, **plus live animation on the canvas** — each
-control point drifts with the exact motion model used by the web tool and
-plugin (orbit + breathing oscillation, border points pinned to their edge).
-Once created it lives in *your* shader library — no dependency on the
-premade one — with Speed / Warp / Flow scale sliders in the fill panel.
+Figma's stock mesh gradient, plus (unsupported today, see above) live canvas
+animation — each control point drifting with the exact motion model used by
+the web tool and plugin. Once created it lives in *your* shader library — no
+dependency on the premade one.
 
 ## One-time creation (Figma desktop)
 
