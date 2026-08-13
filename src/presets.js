@@ -131,7 +131,7 @@ async function fetchSource(url) {
 function stripModuleSyntax(src) {
   return src
     .replace(/^\s*import[^\n]*\n/gm, '')      // drop import lines
-    .replace(/^\s*export\s+(const|function)/gm, '$1') // export const/function -> const/function
+    .replace(/^(\s*)export\s+(?=(async|const|function|class|let|var)\b)/gm, '$1') // drop export keyword
     .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, ''); // drop bare export { ... }
 }
 

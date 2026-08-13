@@ -1,0 +1,40 @@
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="handles"></div>
+    <div id="stagebar">
+      <button id="play" class="chip">❚❚</button>
+      <button id="modebtn" class="chip">◐ Light</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div id="swatches" class="swatchrow"></div>
+    <div class="row">
+      <label class="lbl">Light <input id="clight" type="color"></label>
+      <label class="lbl">Dark <input id="cdark" type="color"></label>
+      <button id="cauto" class="mini" title="Reset dark to auto-derived">auto</button>
+    </div>
+  </div>
+
+  <div class="section" id="sliders"></div>
+
+  <div class="section row">
+    <select id="preset"><option value="">Presets…</option></select>
+    <button id="savepreset" class="mini">Save</button>
+    <button id="pullweb" class="mini" title="Load the web tool's current design">⇋ Web tool</button>
+    <button id="sendweb" class="mini" title="Send this design to the web tool">Send ⇀</button>
+  </div>
+
+  <div class="section grid">
+    <button id="importsel" class="act">⬇ Import selection</button>
+    <button id="applymesh" class="act primary">⬆ Apply mesh fill</button>
+    <button id="applyimg" class="act">Frame → image fill</button>
+    <button id="mkvars" class="act">Light/dark variables</button>
+    <button id="copyjs" class="act">Copy JS code</button>
+    <button id="copyhtml" class="act">Copy HTML page</button>
+  </div>
+
+  <div id="status"></div>
+  <textarea id="clip" aria-hidden="true"></textarea>
+</div>

@@ -396,8 +396,8 @@ function renderFigmaPanel() {
       el('span', { class: 'sync-dot' + (syncConnected ? ' sync-dot--on' : '') }),
       el('span', { class: 'muted small', text: syncConnected
         ? (meshReady
-          ? 'Live sync on — in Figma, open the Mesh Gradient Bridge plugin: Pull applies this design, Send imports a selection.'
-          : 'Live sync on — switch to a mesh design (Figma Lattice preset or an import) to make it pullable from Figma.')
+          ? 'Live sync on — the Mesh Gradient plugin in Figma (a full editor) can load this design via "⇋ Web tool" and send designs back here.'
+          : 'Live sync on — switch to a mesh design (Figma Lattice preset or an import) to make it loadable from the Figma plugin.')
         : 'Live sync off — start the tool with "python3 serve.py 5599". Console scripts below still work.' }),
     ]),
   );

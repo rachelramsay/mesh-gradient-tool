@@ -27,24 +27,41 @@ python3 serve.py 5599
 
 Then open <http://localhost:5599/index.html>.
 
-## Figma live sync (no console needed)
+## Figma plugin — the full editor inside Figma
 
-`figma-plugin/` is a local Figma plugin that syncs designs with the running
-tool directly. One-time install in the Figma **desktop** app:
+`figma-plugin/` is a complete standalone editor (same WebGL engine as the web
+tool, bundled by `build_plugin.py`). No server needed. One-time install in the
+Figma **desktop** app:
 
 1. Menu → **Plugins → Development → Import plugin from manifest…**
 2. Pick `figma-plugin/manifest.json`
 
-Then, with the tool running (`python3 serve.py 5599`), open the plugin
-(Plugins → Development → Mesh Gradient Bridge):
+Open it from Plugins → Development → **Mesh Gradient**. Inside the panel:
 
-- **Pull from tool** — applies the tool's current mesh design to the selected
-  frame as a live, editable mesh gradient fill
-- **Send selection to tool** — reads the selected layer's mesh gradient; an
-  import banner appears in the tool
+- **Live animated preview** with pause-to-edit draggable points, per-point
+  light/dark colors (OKLab auto-derived darks), animation and effect sliders
+- **Import selection** — reads the selected layer's mesh gradient fill,
+  including screenshot-verified grid topology recovery
+- **Apply mesh fill** — writes the design onto the selection as a native,
+  editable Figma mesh gradient
+- **Frame → image fill** — captures the paused animation frame at the
+  selection's size and applies it as an image fill (works for free-point
+  designs and motion moments the static shader can't hold)
+- **Light/dark variables** — creates or updates a "Mesh Gradient" variable
+  collection from the current palette
+- **Copy JS / Copy HTML** — the same self-contained code exports as the web
+  tool, from inside Figma
+- **Presets** — built-ins plus save-your-own (persisted via Figma
+  clientStorage)
 
-The Figma panel inside the tool also offers clipboard-based console scripts as
-a fallback that needs no plugin or server.
+After changing `src/*.js` or `figma-plugin/ui-src/*`, rebuild the panel with:
+
+```bash
+python3 build_plugin.py
+```
+
+The web tool remains fully standalone, and its Figma panel keeps the
+console-script fallback that needs no plugin at all.
 
 ## Use the exported runtime
 
