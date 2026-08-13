@@ -108,6 +108,11 @@ select {
     <button id="copyhtml" class="act">Copy HTML page</button>
   </div>
 
+  <div class="section row">
+    <button id="captureshader" class="mini" title="Select a layer filled with your custom shader (at default settings) and click to make Apply target it">Use selection’s shader for Apply</button>
+    <span id="shadertarget" class="lbl">target: stock mesh</span>
+  </div>
+
   <div id="status"></div>
   <textarea id="clip" aria-hidden="true"></textarea>
 </div>
@@ -1312,9 +1317,67 @@ $('importsel').onclick = () => {
   post({ type: 'import-selection' });
 };
 
+// When a custom shader mapping is captured, Apply targets the user's own
+// shader (e.g. the bundled custom-shader/, which animates on the canvas)
+// instead of the stock account-library mesh shader.
+let customShaderMap = null;
+
+function updateShaderTarget() {
+  $('shadertarget').textContent = customShaderMap
+    ? 'target: custom (animated)'
+    : 'target: stock mesh';
+}
+
+const LATTICE = [0, 33, 67, 100];
+const NUM_DEFAULTS = { 128: 'tessellation', 0.6: 'speed', 0.5: 'warp', 1.2: 'flowScale' };
+function deriveShaderMap(id, properties) {
+  const slots = new Array(16).fill(null);
+  const nums = {};
+  for (const key in properties) {
+    const v = properties[key];
+    if (v && typeof v === 'object' && typeof v.x === 'number') {
+      for (let i = 0; i < 16; i++) {
+        if (Math.abs(v.x - LATTICE[i % 4]) < 1.5 && Math.abs(v.y - LATTICE[(i / 4) | 0]) < 1.5) {
+          slots[i] = key;
+          break;
+        }
+      }
+    } else if (typeof v === 'number') {
+      for (const d in NUM_DEFAULTS) {
+        if (Math.abs(v - +d) < 0.001) { nums[NUM_DEFAULTS[d]] = key; break; }
+      }
+    }
+  }
+  if (slots.some((s) => !s)) return null; // needs the shader at default positions
+  return { id, slots, nums };
+}
+
+function buildCustomPaint() {
+  const m = customShaderMap;
+  const properties = {};
+  config.points.forEach((p, i) => {
+    const [r, g, b] = hexToRgb01(p.color);
+    properties[m.slots[i]] = { x: p.x * 100, y: p.y * 100, color: { r, g, b, a: 1 } };
+  });
+  if (m.nums.tessellation) properties[m.nums.tessellation] = 128;
+  if (m.nums.speed) properties[m.nums.speed] = config.animation.speed;
+  if (m.nums.warp) properties[m.nums.warp] = config.animation.warp;
+  if (m.nums.flowScale) properties[m.nums.flowScale] = config.animation.noiseScale;
+  return { type: 'SHADER', visible: true, opacity: 1, blendMode: 'NORMAL', id: m.id, properties };
+}
+
+$('captureshader').onclick = () => {
+  if (!IN_FIGMA) return setStatus('Capture needs to run inside Figma.', true);
+  setStatus('Reading selection’s shader…');
+  post({ type: 'capture-shader' });
+};
+
 $('applymesh').onclick = () => {
   try {
-    const paint = configToFigmaShaderPaint(config);
+    if (config.mode !== 'mesh' || config.points.length !== 16) {
+      throw new Error('Figma shader export requires mesh mode with 16 grid points.');
+    }
+    const paint = customShaderMap ? buildCustomPaint() : configToFigmaShaderPaint(config);
     if (!IN_FIGMA) return setStatus('Apply needs to run inside Figma.', true);
     post({ type: 'apply-shader', paint });
   } catch (err) {
@@ -1415,6 +1478,21 @@ window.onmessage = async (event) => {
     userPresets = msg.presets || {};
     renderPresets();
 
+  } else if (msg.type === 'shader-map') {
+    customShaderMap = msg.map || null;
+    updateShaderTarget();
+
+  } else if (msg.type === 'shader-captured') {
+    const map = deriveShaderMap(msg.id, msg.properties);
+    if (!map) {
+      setStatus('Couldn’t map that shader — apply it with DEFAULT point positions first, then capture.', true);
+    } else {
+      customShaderMap = map;
+      post({ type: 'save-shader-map', map });
+      updateShaderTarget();
+      setStatus('Apply now targets your shader (' + Object.keys(map.nums).length + ' animation params mapped).');
+    }
+
   } else if (msg.type === 'selection-mesh') {
     // properties + node size + optional PNG reference for topology refinement
     let cfg = figmaShaderToConfig(msg.properties, { width: msg.width, height: msg.height });
@@ -1453,7 +1531,9 @@ function applyAll() {
 }
 applyAll();
 renderPresets();
+updateShaderTarget();
 post({ type: 'get-presets' });
+post({ type: 'get-shader-map' });
 if (!IN_FIGMA) setStatus('Browser test mode — Figma actions disabled.');
 
 </script>

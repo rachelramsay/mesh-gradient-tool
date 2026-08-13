@@ -6,6 +6,7 @@
 figma.showUI(__html__, { width: 380, height: 610, themeColors: true });
 
 const PRESET_KEY = 'mesh-gradient.presets';
+const SHADER_MAP_KEY = 'mesh-gradient.shader-map';
 
 function reply(msg) { figma.ui.postMessage(msg); }
 function status(ok, error) { reply({ type: 'status', ok, error }); }
@@ -27,6 +28,22 @@ figma.ui.onmessage = async (msg) => {
 
   } else if (msg.type === 'save-presets') {
     await figma.clientStorage.setAsync(PRESET_KEY, msg.presets || {});
+
+  // ---- custom shader targeting ---------------------------------------------
+  } else if (msg.type === 'get-shader-map') {
+    const map = (await figma.clientStorage.getAsync(SHADER_MAP_KEY)) || null;
+    reply({ type: 'shader-map', map });
+
+  } else if (msg.type === 'save-shader-map') {
+    await figma.clientStorage.setAsync(SHADER_MAP_KEY, msg.map || null);
+
+  } else if (msg.type === 'capture-shader') {
+    const node = figma.currentPage.selection.find(
+      (n) => 'fills' in n && Array.isArray(n.fills) && n.fills.some((f) => f.type === 'SHADER')
+    );
+    if (!node) return status(null, 'Select a layer filled with your custom shader first.');
+    const shader = node.fills.find((f) => f.type === 'SHADER');
+    reply({ type: 'shader-captured', id: shader.id, properties: shader.properties });
 
   // ---- import the selected mesh (with a PNG reference for refinement) ------
   } else if (msg.type === 'import-selection') {
