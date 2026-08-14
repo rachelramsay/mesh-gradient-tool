@@ -3,7 +3,7 @@
 // ENGINE_SRC string used for the code exports. Outside Figma (opened directly
 // in a browser for testing) Figma-side actions are stubbed.
 
-const PANEL_VERSION = 14; // bump on each build_plugin.py rebuild worth telling apart
+const PANEL_VERSION = 15; // bump on each build_plugin.py rebuild worth telling apart
 const IN_FIGMA = window.parent !== window;
 const $ = (id) => document.getElementById(id);
 const post = (msg) => { if (IN_FIGMA) parent.postMessage({ pluginMessage: msg }, '*'); };
@@ -154,10 +154,10 @@ $('preset').onchange = () => {
     config = JSON.parse(JSON.stringify(src));
     if (!config.frame) config.frame = frame;
     selected = 0;
-    const usingTokens = pulledPalette && pulledPalette.length;
-    if (usingTokens) applyPulledPalette(); // preset = layout/motion, tokens = color
     applyAll();
-    if (usingTokens) setStatus('Preset layout loaded with your token colors. (Unlink Variables to use preset colors.)');
+    if (pulledPalette && pulledPalette.length) {
+      setStatus('Preset loaded with its own colors — press "Pull colors" to apply your tokens to this layout.');
+    }
   }
   $('preset').value = '';
 };
@@ -415,7 +415,7 @@ window.onmessage = async (event) => {
     renderPoints();
     pushCfg();
     setStatus('Applied ' + pulledPalette.length + ' token colors across ' + config.points.length +
-      ' points. Pick any preset — its layout loads with these colors.');
+      ' points. Preset switches keep their own colors — Pull again to re-apply tokens.');
 
   } else if (msg.type === 'shader-captured') {
     const map = deriveShaderMap(msg.id, msg.properties);
