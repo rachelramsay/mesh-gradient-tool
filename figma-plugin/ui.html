@@ -1153,7 +1153,7 @@ const ENGINE_SRC = "// Shader source for the animated mesh gradient.\n// Kept de
 // ENGINE_SRC string used for the code exports. Outside Figma (opened directly
 // in a browser for testing) Figma-side actions are stubbed.
 
-const PANEL_VERSION = 13; // bump on each build_plugin.py rebuild worth telling apart
+const PANEL_VERSION = 14; // bump on each build_plugin.py rebuild worth telling apart
 const IN_FIGMA = window.parent !== window;
 const $ = (id) => document.getElementById(id);
 const post = (msg) => { if (IN_FIGMA) parent.postMessage({ pluginMessage: msg }, '*'); };
@@ -1304,7 +1304,10 @@ $('preset').onchange = () => {
     config = JSON.parse(JSON.stringify(src));
     if (!config.frame) config.frame = frame;
     selected = 0;
+    const usingTokens = pulledPalette && pulledPalette.length;
+    if (usingTokens) applyPulledPalette(); // preset = layout/motion, tokens = color
     applyAll();
+    if (usingTokens) setStatus('Preset layout loaded with your token colors. (Unlink Variables to use preset colors.)');
   }
   $('preset').value = '';
 };
@@ -1409,11 +1412,24 @@ $('mkvars').onclick = () => {
 };
 
 // ---- variable collection link: pull/push point colors from Figma variables --
+// The last pulled token palette is the ACTIVE palette: it tiles across all
+// points of the current design and re-applies whenever a preset loads, so
+// presets supply layout/motion while the tokens supply color.
+let pulledPalette = null;
+function applyPulledPalette() {
+  if (!pulledPalette || !pulledPalette.length) return;
+  config.points.forEach((p, i) => {
+    const v = pulledPalette[i % pulledPalette.length];
+    p.color = rgb01ToHex(v.light.r, v.light.g, v.light.b);
+    if (v.dark) p.darkColor = rgb01ToHex(v.dark.r, v.dark.g, v.dark.b);
+    else delete p.darkColor;
+  });
+}
 $('varcol').onchange = () => {
   const id = $('varcol').value;
   if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);
   post({ type: 'link-collection', collectionId: id || null });
-  if (!id) { $('varmodes').hidden = true; $('varmodes').innerHTML = ''; }
+  if (!id) { $('varmodes').hidden = true; $('varmodes').innerHTML = ''; pulledPalette = null; }
   setStatus(id
     ? 'Linked. Pull loads its Light/Dark values; Push writes edits back. (Figma can’t bind shader colors to variables yet — this sync is the bridge; re-pull after token changes.)'
     : 'Variables unlinked.');
@@ -1540,17 +1556,16 @@ window.onmessage = async (event) => {
     }
 
   } else if (msg.type === 'variables-pulled') {
-    // index-mapped: first N color variables -> mesh points, light+dark resolved
-    const n = Math.min(msg.palette.length, config.points.length);
-    for (let i = 0; i < n; i++) {
-      const v = msg.palette[i];
-      if (v.light) config.points[i].color = rgb01ToHex(v.light.r, v.light.g, v.light.b);
-      if (v.dark) config.points[i].darkColor = rgb01ToHex(v.dark.r, v.dark.g, v.dark.b);
+    pulledPalette = msg.palette.filter((v) => v.light);
+    if (!pulledPalette.length) {
+      pulledPalette = null;
+      return setStatus('No resolvable colors in that collection.', true);
     }
+    applyPulledPalette();
     renderPoints();
     pushCfg();
-    setStatus('Pulled ' + n + ' colors from variables (' +
-      (msg.palette.length < config.points.length ? 'collection has fewer colors than points' : 'Light + Dark') + ').');
+    setStatus('Applied ' + pulledPalette.length + ' token colors across ' + config.points.length +
+      ' points. Pick any preset — its layout loads with these colors.');
 
   } else if (msg.type === 'shader-captured') {
     const map = deriveShaderMap(msg.id, msg.properties);
