@@ -21,7 +21,7 @@ function lightDarkModes(col) {
 
 // Normalize the stored link: legacy plain string -> { id, overrides }.
 async function getVarLink() {
-  const raw = await figma.clientStorage.getAsync(VAR_LINK_KEY);
+  const raw = await storageGet(VAR_LINK_KEY);
   if (!raw) return null;
   if (typeof raw === 'string') return { id: raw, overrides: {} };
   return { id: raw.id, overrides: raw.overrides || {} };
@@ -113,6 +113,15 @@ function status(ok, error) { reply({ type: 'status', ok, error }); }
 // Figma plugin APIs sometimes throw plain strings — String(e) keeps the real text.
 function errText(e) { return (e && e.message) ? e.message : String(e); }
 
+// clientStorage requires a plugin id in the manifest; fail soft so features
+// still work within the session even if storage is unavailable.
+async function storageGet(key) {
+  try { return await figma.clientStorage.getAsync(key); } catch (e) { return null; }
+}
+async function storageSet(key, value) {
+  try { await figma.clientStorage.setAsync(key, value); } catch (e) { /* non-fatal */ }
+}
+
 function fillableSelection() {
   return figma.currentPage.selection.filter((n) => 'fills' in n);
 }
@@ -125,11 +134,11 @@ function hexToRgba(hex) {
 figma.ui.onmessage = async (msg) => {
   // ---- presets (clientStorage) ---------------------------------------------
   if (msg.type === 'get-presets') {
-    const presets = (await figma.clientStorage.getAsync(PRESET_KEY)) || {};
+    const presets = (await storageGet(PRESET_KEY)) || {};
     reply({ type: 'presets', presets });
 
   } else if (msg.type === 'save-presets') {
-    await figma.clientStorage.setAsync(PRESET_KEY, msg.presets || {});
+    await storageSet(PRESET_KEY, msg.presets || {});
 
   // ---- variable collection link --------------------------------------------
   // Collections can be LOCAL (defined in this file) or LIBRARY (published from
@@ -171,10 +180,10 @@ figma.ui.onmessage = async (msg) => {
 
   } else if (msg.type === 'link-collection') {
     if (!msg.collectionId) {
-      await figma.clientStorage.setAsync(VAR_LINK_KEY, null);
+      await storageSet(VAR_LINK_KEY, null);
     } else {
       const link = { id: msg.collectionId, overrides: {} };
-      await figma.clientStorage.setAsync(VAR_LINK_KEY, link);
+      await storageSet(VAR_LINK_KEY, link);
       try { await sendThemeHops(link); } catch (e) { /* pickers are optional */ }
     }
 
@@ -182,7 +191,7 @@ figma.ui.onmessage = async (msg) => {
     const link = await getVarLink();
     if (link) {
       link.overrides[msg.collectionId] = msg.modeId;
-      await figma.clientStorage.setAsync(VAR_LINK_KEY, link);
+      await storageSet(VAR_LINK_KEY, link);
     }
 
   } else if (msg.type === 'pull-variables') {
@@ -207,11 +216,11 @@ figma.ui.onmessage = async (msg) => {
 
   // ---- custom shader targeting ---------------------------------------------
   } else if (msg.type === 'get-shader-map') {
-    const map = (await figma.clientStorage.getAsync(SHADER_MAP_KEY)) || null;
+    const map = (await storageGet(SHADER_MAP_KEY)) || null;
     reply({ type: 'shader-map', map });
 
   } else if (msg.type === 'save-shader-map') {
-    await figma.clientStorage.setAsync(SHADER_MAP_KEY, msg.map || null);
+    await storageSet(SHADER_MAP_KEY, msg.map || null);
 
   } else if (msg.type === 'capture-shader') {
     const node = figma.currentPage.selection.find(
