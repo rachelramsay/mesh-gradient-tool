@@ -9,10 +9,13 @@ const PRESET_KEY = 'mesh-gradient.presets';
 const SHADER_MAP_KEY = 'mesh-gradient.shader-map';
 const VAR_LINK_KEY = 'mesh-gradient.linked-collection';
 
-// Pick a collection's Light/Dark modes by name, falling back to mode order.
+// Pick a collection's Light/Dark modes by name. When a collection has no
+// light/dark-named modes (e.g. a brand-theme or single-mode collection), both
+// fall back to its DEFAULT mode — never an arbitrary other mode.
 function lightDarkModes(col) {
-  const light = col.modes.find((m) => /light/i.test(m.name)) || col.modes[0];
-  const dark = col.modes.find((m) => /dark/i.test(m.name)) || col.modes[1] || col.modes[0];
+  const def = col.modes.find((m) => m.modeId === col.defaultModeId) || col.modes[0];
+  const light = col.modes.find((m) => /light/i.test(m.name)) || def;
+  const dark = col.modes.find((m) => /dark/i.test(m.name)) || def;
   return { light, dark };
 }
 

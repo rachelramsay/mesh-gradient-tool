@@ -1152,6 +1152,7 @@ const ENGINE_SRC = "// Shader source for the animated mesh gradient.\n// Kept de
 // ENGINE_SRC string used for the code exports. Outside Figma (opened directly
 // in a browser for testing) Figma-side actions are stubbed.
 
+const PANEL_VERSION = 10; // bump on each build_plugin.py rebuild worth telling apart
 const IN_FIGMA = window.parent !== window;
 const $ = (id) => document.getElementById(id);
 const post = (msg) => { if (IN_FIGMA) parent.postMessage({ pluginMessage: msg }, '*'); };
@@ -1510,6 +1511,7 @@ window.onmessage = async (event) => {
       sel.add(new Option(c.name + ' (' + c.colorCount + ' colors)', c.id));
     }
     if (msg.linkedId) sel.value = msg.linkedId;
+    setStatus('Ready (v' + PANEL_VERSION + ') — ' + msg.list.length + ' variable collection(s) found.');
 
   } else if (msg.type === 'variables-pulled') {
     // index-mapped: first N color variables -> mesh points, light+dark resolved
