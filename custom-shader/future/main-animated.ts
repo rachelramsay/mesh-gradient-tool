@@ -1,13 +1,16 @@
-// Mesh gradient (custom) — your own static Figma shader fill.
+// Animated mesh gradient — a custom Figma shader fill.
 //
-// 4x4 Catmull-Rom bicubic mesh: 16 draggable color-point handles, forward
-// tessellation, 4x MSAA with a manual un-premultiplying resolve. Buildable in
-// Figma's shader editor TODAY (no frame.time — user-authored shaders may not
-// read it; see ../future/ for the animated port kept for when that changes).
+// 4x4 Catmull-Rom bicubic mesh (same rendering approach as Figma's stock mesh
+// gradient: forward tessellation + 4x MSAA with a manual un-premultiplying
+// resolve) — plus LIVE ANIMATION: each control point drifts around its rest
+// position with a constant-velocity orbit blended with a breathing oscillation,
+// the same motion model as the mesh-gradient web tool. Border points slide only
+// along their frame edge and corners stay pinned, so the surface boundary
+// remains exactly straight while the interior flexes.
 //
-// Defaults are the pristine lattice with unique numeric values so the
-// companion plugin's "Use selection's shader for Apply" can map the hashed
-// property keys automatically.
+// Defaults are chosen to be unique so the companion Figma plugin can map this
+// shader's hashed property keys automatically (tessellation 128, speed 0.6,
+// warp 0.5, flow scale 1.2).
 import { defineProperties } from "figma:shaders";
 export default function Effect() { }
 export function setup(device: any, frame: any) {
@@ -175,14 +178,39 @@ export function render(device: any, frame: any) {
     function numberParam(name: any, fallback: any) {
         return finiteNumber(params[name], fallback);
     }
-    function colorPointParam(name: any, fallback: any) {
+    // ---- control-point drift animation (ported from the web tool engine) ----
+    var time = finiteNumber(frame.time, 0);
+    var speed = numberParam("speed", 0.6);
+    var warp = numberParam("warp", 0.5);
+    var flowScale = numberParam("flowScale", 1.2);
+    var t = time * speed * 0.8;
+    var amp = warp * 14.0; // percent units (positions are 0..100)
+    function hash01(n: any) {
+        var s = Math.sin(n) * 43758.5453;
+        return s - Math.floor(s);
+    }
+    function colorPointParam(name: any, index: any, fallback: any) {
         var value = params[name] || {};
         var color = value.color || {};
+        var x = finiteNumber(value.x, fallback[0]);
+        var y = finiteNumber(value.y, fallback[1]);
+        if (amp > 0) {
+            var P = 6.2832;
+            var fs = flowScale;
+            var f1 = fs * (0.8 + 0.5 * hash01(index * 12.99 + 1));
+            var f3 = fs * (0.9 + 0.5 * hash01(index * 12.99 + 3));
+            var dir = (index % 2 === 0) ? 1 : -1;
+            var orb = dir * t * fs * (0.9 + 0.7 * hash01(index * 3.7 + 5)) + P * hash01(index * 3.7 + 6);
+            var dx = amp * (0.5 * Math.sin(t * f1 + P * hash01(index * 78.23 + 1)) + 0.5 * Math.cos(orb));
+            var dy = amp * (0.5 * Math.sin(t * f3 + P * hash01(index * 78.23 + 3)) + 0.5 * Math.sin(orb));
+            // border points slide along their edge only; corners stay pinned
+            if (Math.abs(x) < 2 || Math.abs(x - 100) < 2) { dx = 0; }
+            if (Math.abs(y) < 2 || Math.abs(y - 100) < 2) { dy = 0; }
+            x += dx;
+            y += dy;
+        }
         return [
-            finiteNumber(value.x, fallback[0]),
-            finiteNumber(value.y, fallback[1]),
-            0,
-            0,
+            x, y, 0, 0,
             finiteNumber(color.r, fallback[2]),
             finiteNumber(color.g, fallback[3]),
             finiteNumber(color.b, fallback[4]),
@@ -249,22 +277,22 @@ export function render(device: any, frame: any) {
     device.queue.writeBuffer(frame.state.uniformBuf, 0, new Float32Array([
         0, width, height, 0,
         width, height, 0, 0,
-        ...colorPointParam("p00", [0, 0, 1, 0.42, 0.42, 1]),
-        ...colorPointParam("p10", [33, 0, 1, 0.64, 0.42, 1]),
-        ...colorPointParam("p20", [67, 0, 1, 0.82, 0.42, 1]),
-        ...colorPointParam("p30", [100, 0, 1, 0.82, 0.4, 1]),
-        ...colorPointParam("p01", [0, 33, 0.7, 0.3, 0.6, 1]),
-        ...colorPointParam("p11", [33, 33, 0.8, 0.55, 0.5, 1]),
-        ...colorPointParam("p21", [67, 33, 0.9, 0.7, 0.45, 1]),
-        ...colorPointParam("p31", [100, 33, 0.5, 0.7, 0.35, 1]),
-        ...colorPointParam("p02", [0, 67, 0.4, 0.5, 0.7, 1]),
-        ...colorPointParam("p12", [33, 67, 0.35, 0.65, 0.65, 1]),
-        ...colorPointParam("p22", [67, 67, 0.2, 0.65, 0.55, 1]),
-        ...colorPointParam("p32", [100, 67, 0.1, 0.55, 0.7, 1]),
-        ...colorPointParam("p03", [0, 100, 0.02, 0.84, 0.63, 1]),
-        ...colorPointParam("p13", [33, 100, 0.1, 0.7, 0.65, 1]),
-        ...colorPointParam("p23", [67, 100, 0.1, 0.6, 0.7, 1]),
-        ...colorPointParam("p33", [100, 100, 0.07, 0.54, 0.7, 1]),
+        ...colorPointParam("p00", 0, [0, 0, 1, 0.42, 0.42, 1]),
+        ...colorPointParam("p10", 1, [33, 0, 1, 0.64, 0.42, 1]),
+        ...colorPointParam("p20", 2, [67, 0, 1, 0.82, 0.42, 1]),
+        ...colorPointParam("p30", 3, [100, 0, 1, 0.82, 0.4, 1]),
+        ...colorPointParam("p01", 4, [0, 33, 0.7, 0.3, 0.6, 1]),
+        ...colorPointParam("p11", 5, [33, 33, 0.8, 0.55, 0.5, 1]),
+        ...colorPointParam("p21", 6, [67, 33, 0.9, 0.7, 0.45, 1]),
+        ...colorPointParam("p31", 7, [100, 33, 0.5, 0.7, 0.35, 1]),
+        ...colorPointParam("p02", 8, [0, 67, 0.4, 0.5, 0.7, 1]),
+        ...colorPointParam("p12", 9, [33, 67, 0.35, 0.65, 0.65, 1]),
+        ...colorPointParam("p22", 10, [67, 67, 0.2, 0.65, 0.55, 1]),
+        ...colorPointParam("p32", 11, [100, 67, 0.1, 0.55, 0.7, 1]),
+        ...colorPointParam("p03", 12, [0, 100, 0.02, 0.84, 0.63, 1]),
+        ...colorPointParam("p13", 13, [33, 100, 0.1, 0.7, 0.65, 1]),
+        ...colorPointParam("p23", 14, [67, 100, 0.1, 0.6, 0.7, 1]),
+        ...colorPointParam("p33", 15, [100, 100, 0.07, 0.54, 0.7, 1]),
         0, 0, 0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0,
@@ -342,6 +370,33 @@ defineProperties(Effect, {
     "p13": { type: "color-point", label: "Point (1,3)", defaultValue: { "x": 33, "y": 100, "color": { "r": 0.1, "g": 0.7, "b": 0.65, "a": 1 } }, mode: "canvas", unit: "%" },
     "p23": { type: "color-point", label: "Point (2,3)", defaultValue: { "x": 67, "y": 100, "color": { "r": 0.1, "g": 0.6, "b": 0.7, "a": 1 } }, mode: "canvas", unit: "%" },
     "p33": { type: "color-point", label: "Point (3,3)", defaultValue: { "x": 100, "y": 100, "color": { "r": 0.07, "g": 0.54, "b": 0.7, "a": 1 } }, mode: "canvas", unit: "%" },
+    "speed": {
+        type: "number",
+        label: "Speed",
+        defaultValue: 0.6,
+        control: "slider",
+        min: 0,
+        max: 3,
+        step: 0.01,
+    },
+    "warp": {
+        type: "number",
+        label: "Warp",
+        defaultValue: 0.5,
+        control: "slider",
+        min: 0,
+        max: 2,
+        step: 0.01,
+    },
+    "flowScale": {
+        type: "number",
+        label: "Flow scale",
+        defaultValue: 1.2,
+        control: "slider",
+        min: 0.2,
+        max: 4,
+        step: 0.01,
+    },
     "tessellation": {
         type: "number",
         label: "Tessellation",

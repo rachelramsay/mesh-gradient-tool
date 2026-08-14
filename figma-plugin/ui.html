@@ -1329,7 +1329,7 @@ let customShaderMap = null;
 
 function updateShaderTarget() {
   $('shadertarget').textContent = customShaderMap
-    ? 'target: custom (animated)'
+    ? 'target: your custom shader'
     : 'target: stock mesh';
 }
 
@@ -1411,7 +1411,9 @@ $('varcol').onchange = () => {
   const id = $('varcol').value;
   if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);
   post({ type: 'link-collection', collectionId: id || null });
-  setStatus(id ? 'Collection linked — Pull colors to load it, Push to write to it.' : 'Variables unlinked.');
+  setStatus(id
+    ? 'Linked. Pull loads its Light/Dark values; Push writes edits back. (Figma can’t bind shader colors to variables yet — this sync is the bridge; re-pull after token changes.)'
+    : 'Variables unlinked.');
 };
 $('pullvars').onclick = () => {
   if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);

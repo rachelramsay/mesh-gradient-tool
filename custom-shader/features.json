@@ -1,6 +1,6 @@
 {
-  "name": "Animated mesh gradient",
+  "name": "Mesh gradient (custom)",
   "version": 2,
-  "isAnimated": true,
+  "isAnimated": false,
   "usesMouse": false
 }
