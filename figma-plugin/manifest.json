@@ -4,6 +4,7 @@
   "main": "code.js",
   "ui": "ui.html",
   "editorType": ["figma"],
+  "permissions": ["teamlibrary"],
   "networkAccess": {
     "allowedDomains": ["http://localhost:5599"],
     "reasoning": "Live-syncs designs with the local mesh gradient tool dev server (serve.py)."

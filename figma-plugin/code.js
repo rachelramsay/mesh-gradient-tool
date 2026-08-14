@@ -110,6 +110,8 @@ async function colorVariablesOf(col) {
 
 function reply(msg) { figma.ui.postMessage(msg); }
 function status(ok, error) { reply({ type: 'status', ok, error }); }
+// Figma plugin APIs sometimes throw plain strings — String(e) keeps the real text.
+function errText(e) { return (e && e.message) ? e.message : String(e); }
 
 function fillableSelection() {
   return figma.currentPage.selection.filter((n) => 'fills' in n);
@@ -135,13 +137,15 @@ figma.ui.onmessage = async (msg) => {
   // invisible to the local API; they're enumerated via teamLibrary and
   // imported on pull. Linked ids are prefixed 'local:' / 'lib:'.
   } else if (msg.type === 'get-collections') {
+    const list = [];
+    let step = 'local variables';
     try {
-      const list = [];
       const collections = await figma.variables.getLocalVariableCollectionsAsync();
       for (const col of collections) {
         const colorVars = await colorVariablesOf(col);
         if (colorVars.length) list.push({ id: 'local:' + col.id, name: col.name, colorCount: colorVars.length });
       }
+      step = 'library variables';
       try {
         const libCols = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
         for (const lc of libCols) {
@@ -151,13 +155,18 @@ figma.ui.onmessage = async (msg) => {
             list.push({ id: 'lib:' + lc.key, name: lc.name + ' — ' + lc.libraryName, colorCount });
           }
         }
-      } catch (e) { /* team library unavailable (e.g. drafts) — locals still listed */ }
+      } catch (e) { /* team library unavailable (drafts / no permission) — locals still listed */ }
+      step = 'link restore';
       const link = await getVarLink();
       reply({ type: 'collections', list, linkedId: link ? link.id : null });
       if (!list.length) status(null, 'No color-variable collections found (local or library) in this file.');
-      if (link) await sendThemeHops(link); // restore theme pickers on boot
+      if (link) {
+        try { await sendThemeHops(link); } catch (e) { /* pickers are optional */ }
+      }
     } catch (e) {
-      status(null, 'Listing variables failed: ' + e.message);
+      // still deliver whatever was collected so the dropdown isn't dead
+      reply({ type: 'collections', list, linkedId: null });
+      status(null, 'Listing variables failed at ' + step + ': ' + errText(e));
     }
 
   } else if (msg.type === 'link-collection') {
@@ -193,7 +202,7 @@ figma.ui.onmessage = async (msg) => {
       }
       reply({ type: 'variables-pulled', palette });
     } catch (e) {
-      status(null, 'Pull failed: ' + e.message);
+      status(null, 'Pull failed: ' + errText(e));
     }
 
   // ---- custom shader targeting ---------------------------------------------
@@ -243,7 +252,7 @@ figma.ui.onmessage = async (msg) => {
       figma.notify('Mesh gradient applied to ' + targets.length + ' layer(s)');
       status('Applied mesh fill to ' + targets.length + ' layer(s).');
     } catch (e) {
-      status(null, 'Apply failed: ' + e.message);
+      status(null, 'Apply failed: ' + errText(e));
     }
 
   // ---- apply the paused frame as an image fill ------------------------------
@@ -263,7 +272,7 @@ figma.ui.onmessage = async (msg) => {
       figma.notify('Frame applied as image fill');
       status('Paused frame applied as image fill.');
     } catch (e) {
-      status(null, 'Image fill failed: ' + e.message);
+      status(null, 'Image fill failed: ' + errText(e));
     }
 
   // ---- create/update Light/Dark variables ----------------------------------
@@ -308,7 +317,7 @@ figma.ui.onmessage = async (msg) => {
       figma.notify('Variables updated in "' + col.name + '" (' + msg.palette.length + ')');
       status('Pushed ' + msg.palette.length + ' colors × Light/Dark to "' + col.name + '".');
     } catch (e) {
-      status(null, 'Variables failed: ' + e.message);
+      status(null, 'Variables failed: ' + errText(e));
     }
   }
 };
