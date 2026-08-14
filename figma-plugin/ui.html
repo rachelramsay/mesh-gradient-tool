@@ -103,6 +103,7 @@ select {
     <select id="varcol"><option value="">Variables: not linked</option></select>
     <button id="pullvars" class="mini" title="Set point colors from the linked collection's Light/Dark values">Pull colors</button>
   </div>
+  <div class="section" id="varmodes" hidden></div>
 
   <div class="section grid">
     <button id="importsel" class="act">⬇ Import selection</button>
@@ -1152,7 +1153,7 @@ const ENGINE_SRC = "// Shader source for the animated mesh gradient.\n// Kept de
 // ENGINE_SRC string used for the code exports. Outside Figma (opened directly
 // in a browser for testing) Figma-side actions are stubbed.
 
-const PANEL_VERSION = 10; // bump on each build_plugin.py rebuild worth telling apart
+const PANEL_VERSION = 11; // bump on each build_plugin.py rebuild worth telling apart
 const IN_FIGMA = window.parent !== window;
 const $ = (id) => document.getElementById(id);
 const post = (msg) => { if (IN_FIGMA) parent.postMessage({ pluginMessage: msg }, '*'); };
@@ -1412,6 +1413,7 @@ $('varcol').onchange = () => {
   const id = $('varcol').value;
   if (!IN_FIGMA) return setStatus('Variables need to run inside Figma.', true);
   post({ type: 'link-collection', collectionId: id || null });
+  if (!id) { $('varmodes').hidden = true; $('varmodes').innerHTML = ''; }
   setStatus(id
     ? 'Linked. Pull loads its Light/Dark values; Push writes edits back. (Figma can’t bind shader colors to variables yet — this sync is the bridge; re-pull after token changes.)'
     : 'Variables unlinked.');
@@ -1512,6 +1514,30 @@ window.onmessage = async (event) => {
     }
     if (msg.linkedId) sel.value = msg.linkedId;
     setStatus('Ready (v' + PANEL_VERSION + ') — ' + msg.list.length + ' variable collection(s) found.');
+
+  } else if (msg.type === 'collection-modes') {
+    // The linked collection's aliases pass through collections with their own
+    // themes (multiple modes, none named light/dark) — render a picker for
+    // each so the user chooses which theme the Light/Dark values resolve in.
+    const host = $('varmodes');
+    host.innerHTML = '';
+    host.hidden = !msg.hops.length;
+    for (const hop of msg.hops) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const label = document.createElement('span');
+      label.className = 'lbl';
+      label.textContent = hop.name + ' theme';
+      const sel = document.createElement('select');
+      for (const m of hop.modes) sel.add(new Option(m.name, m.modeId));
+      sel.value = (msg.overrides && msg.overrides[hop.id]) || hop.defaultModeId;
+      sel.onchange = () => {
+        post({ type: 'set-mode-override', collectionId: hop.id, modeId: sel.value });
+        setStatus('Theme set — Pull colors to re-resolve.');
+      };
+      row.append(label, sel);
+      host.appendChild(row);
+    }
 
   } else if (msg.type === 'variables-pulled') {
     // index-mapped: first N color variables -> mesh points, light+dark resolved

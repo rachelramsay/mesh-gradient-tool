@@ -19,20 +19,87 @@ function lightDarkModes(col) {
   return { light, dark };
 }
 
+// Normalize the stored link: legacy plain string -> { id, overrides }.
+async function getVarLink() {
+  const raw = await figma.clientStorage.getAsync(VAR_LINK_KEY);
+  if (!raw) return null;
+  if (typeof raw === 'string') return { id: raw, overrides: {} };
+  return { id: raw.id, overrides: raw.overrides || {} };
+}
+
 // Resolve a variable's COLOR value for a mode, following aliases across
-// collections (matching mode by name at each hop).
-async function resolveColor(variable, modeKind, depth) {
+// collections. Mode choice per hop: a light/dark-named mode wins; else the
+// user's theme override for that collection; else the collection's default.
+async function resolveColor(variable, modeKind, overrides, depth) {
   if (!variable || (depth || 0) > 8) return null;
   const col = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
   if (!col) return null;
-  const mode = lightDarkModes(col)[modeKind];
+  let mode = lightDarkModes(col)[modeKind];
+  const named = /light/i.test(mode.name) || /dark/i.test(mode.name);
+  if (!named && overrides && overrides[col.id]) {
+    mode = col.modes.find((m) => m.modeId === overrides[col.id]) || mode;
+  }
   const value = variable.valuesByMode[mode.modeId];
   if (value && value.type === 'VARIABLE_ALIAS') {
     const next = await figma.variables.getVariableByIdAsync(value.id);
-    return resolveColor(next, modeKind, (depth || 0) + 1);
+    return resolveColor(next, modeKind, overrides, (depth || 0) + 1);
   }
   if (value && typeof value.r === 'number') return { r: value.r, g: value.g, b: value.b };
   return null;
+}
+
+// Walk the alias graph from a set of variables and collect every collection
+// that has multiple modes with none named light/dark — those are theme axes
+// the user should get a picker for.
+async function findThemeHops(startVars) {
+  const hops = {};
+  const visited = {};
+  async function walk(variable, depth) {
+    if (!variable || depth > 6 || visited[variable.id]) return;
+    visited[variable.id] = true;
+    const col = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+    if (!col) return;
+    const hasNamed = col.modes.some((m) => /light|dark/i.test(m.name));
+    if (col.modes.length > 1 && !hasNamed && !hops[col.id]) {
+      hops[col.id] = {
+        id: col.id,
+        name: col.name,
+        defaultModeId: col.defaultModeId,
+        modes: col.modes.map((m) => ({ modeId: m.modeId, name: m.name })),
+      };
+    }
+    for (const modeId in variable.valuesByMode) {
+      const value = variable.valuesByMode[modeId];
+      if (value && value.type === 'VARIABLE_ALIAS') {
+        await walk(await figma.variables.getVariableByIdAsync(value.id), depth + 1);
+      }
+    }
+  }
+  for (const v of startVars) await walk(v, 0);
+  return Object.keys(hops).map((k) => hops[k]);
+}
+
+// Load the linked collection's color variables (importing them for library
+// links), shared by pull and analysis.
+async function linkedColorVars(link, limit) {
+  if (link.id.indexOf('lib:') === 0) {
+    const libVars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(link.id.slice(4));
+    const colorLibVars = libVars.filter((v) => v.resolvedType === 'COLOR').slice(0, limit);
+    const out = [];
+    for (const lv of colorLibVars) out.push(await figma.variables.importVariableByKeyAsync(lv.key));
+    return out;
+  }
+  const id = link.id.indexOf('local:') === 0 ? link.id.slice(6) : link.id;
+  const col = await figma.variables.getVariableCollectionByIdAsync(id);
+  if (!col) return null;
+  return (await colorVariablesOf(col)).slice(0, limit);
+}
+
+async function sendThemeHops(link) {
+  const vars = await linkedColorVars(link, 6);
+  if (!vars) return;
+  const hops = await findThemeHops(vars);
+  reply({ type: 'collection-modes', hops, overrides: link.overrides });
 }
 
 // A collection's COLOR variables, in collection order.
@@ -85,41 +152,43 @@ figma.ui.onmessage = async (msg) => {
           }
         }
       } catch (e) { /* team library unavailable (e.g. drafts) — locals still listed */ }
-      const linkedId = (await figma.clientStorage.getAsync(VAR_LINK_KEY)) || null;
-      reply({ type: 'collections', list, linkedId });
+      const link = await getVarLink();
+      reply({ type: 'collections', list, linkedId: link ? link.id : null });
       if (!list.length) status(null, 'No color-variable collections found (local or library) in this file.');
+      if (link) await sendThemeHops(link); // restore theme pickers on boot
     } catch (e) {
       status(null, 'Listing variables failed: ' + e.message);
     }
 
   } else if (msg.type === 'link-collection') {
-    await figma.clientStorage.setAsync(VAR_LINK_KEY, msg.collectionId || null);
+    if (!msg.collectionId) {
+      await figma.clientStorage.setAsync(VAR_LINK_KEY, null);
+    } else {
+      const link = { id: msg.collectionId, overrides: {} };
+      await figma.clientStorage.setAsync(VAR_LINK_KEY, link);
+      try { await sendThemeHops(link); } catch (e) { /* pickers are optional */ }
+    }
+
+  } else if (msg.type === 'set-mode-override') {
+    const link = await getVarLink();
+    if (link) {
+      link.overrides[msg.collectionId] = msg.modeId;
+      await figma.clientStorage.setAsync(VAR_LINK_KEY, link);
+    }
 
   } else if (msg.type === 'pull-variables') {
     try {
-      const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
-      if (!linkedId) return status(null, 'Link a collection first.');
-      let colorVars = [];
-      if (linkedId.indexOf('lib:') === 0) {
-        const key = linkedId.slice(4);
-        const libVars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(key);
-        const colorLibVars = libVars.filter((v) => v.resolvedType === 'COLOR').slice(0, 16);
-        for (const lv of colorLibVars) {
-          colorVars.push(await figma.variables.importVariableByKeyAsync(lv.key));
-        }
-      } else {
-        const id = linkedId.indexOf('local:') === 0 ? linkedId.slice(6) : linkedId; // legacy unprefixed = local
-        const col = await figma.variables.getVariableCollectionByIdAsync(id);
-        if (!col) return status(null, 'Linked collection not found — pick one again.');
-        colorVars = (await colorVariablesOf(col)).slice(0, 16);
-      }
+      const link = await getVarLink();
+      if (!link) return status(null, 'Link a collection first.');
+      const colorVars = await linkedColorVars(link, 16);
+      if (!colorVars) return status(null, 'Linked collection not found — pick one again.');
       if (!colorVars.length) return status(null, 'No color variables in that collection.');
       const palette = [];
       for (const v of colorVars) {
         palette.push({
           name: v.name,
-          light: await resolveColor(v, 'light'),
-          dark: await resolveColor(v, 'dark'),
+          light: await resolveColor(v, 'light', link.overrides),
+          dark: await resolveColor(v, 'dark', link.overrides),
         });
       }
       reply({ type: 'variables-pulled', palette });
@@ -204,12 +273,12 @@ figma.ui.onmessage = async (msg) => {
   } else if (msg.type === 'make-variables') {
     try {
       let col = null;
-      const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
-      if (linkedId && linkedId.indexOf('lib:') === 0) {
+      const link = await getVarLink();
+      if (link && link.id.indexOf('lib:') === 0) {
         return status(null, 'The linked collection is a published library — edit its variables in the library file itself. (Pull works here; Push can’t write across files.)');
       }
-      if (linkedId) {
-        const id = linkedId.indexOf('local:') === 0 ? linkedId.slice(6) : linkedId;
+      if (link) {
+        const id = link.id.indexOf('local:') === 0 ? link.id.slice(6) : link.id;
         col = await figma.variables.getVariableCollectionByIdAsync(id);
       }
       if (!col) {
