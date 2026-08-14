@@ -60,34 +60,69 @@ figma.ui.onmessage = async (msg) => {
     await figma.clientStorage.setAsync(PRESET_KEY, msg.presets || {});
 
   // ---- variable collection link --------------------------------------------
+  // Collections can be LOCAL (defined in this file) or LIBRARY (published from
+  // another file — how token setups usually arrive). Library variables are
+  // invisible to the local API; they're enumerated via teamLibrary and
+  // imported on pull. Linked ids are prefixed 'local:' / 'lib:'.
   } else if (msg.type === 'get-collections') {
-    const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    const list = [];
-    for (const col of collections) {
-      const colorVars = await colorVariablesOf(col);
-      if (colorVars.length) list.push({ id: col.id, name: col.name, colorCount: colorVars.length });
+    try {
+      const list = [];
+      const collections = await figma.variables.getLocalVariableCollectionsAsync();
+      for (const col of collections) {
+        const colorVars = await colorVariablesOf(col);
+        if (colorVars.length) list.push({ id: 'local:' + col.id, name: col.name, colorCount: colorVars.length });
+      }
+      try {
+        const libCols = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+        for (const lc of libCols) {
+          const libVars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(lc.key);
+          const colorCount = libVars.filter((v) => v.resolvedType === 'COLOR').length;
+          if (colorCount) {
+            list.push({ id: 'lib:' + lc.key, name: lc.name + ' — ' + lc.libraryName, colorCount });
+          }
+        }
+      } catch (e) { /* team library unavailable (e.g. drafts) — locals still listed */ }
+      const linkedId = (await figma.clientStorage.getAsync(VAR_LINK_KEY)) || null;
+      reply({ type: 'collections', list, linkedId });
+      if (!list.length) status(null, 'No color-variable collections found (local or library) in this file.');
+    } catch (e) {
+      status(null, 'Listing variables failed: ' + e.message);
     }
-    const linkedId = (await figma.clientStorage.getAsync(VAR_LINK_KEY)) || null;
-    reply({ type: 'collections', list, linkedId });
 
   } else if (msg.type === 'link-collection') {
     await figma.clientStorage.setAsync(VAR_LINK_KEY, msg.collectionId || null);
 
   } else if (msg.type === 'pull-variables') {
-    const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
-    const col = linkedId && await figma.variables.getVariableCollectionByIdAsync(linkedId);
-    if (!col) return status(null, 'Linked collection not found — pick one again.');
-    const colorVars = await colorVariablesOf(col);
-    if (!colorVars.length) return status(null, 'No color variables in that collection.');
-    const palette = [];
-    for (const v of colorVars.slice(0, 16)) {
-      palette.push({
-        name: v.name,
-        light: await resolveColor(v, 'light'),
-        dark: await resolveColor(v, 'dark'),
-      });
+    try {
+      const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
+      if (!linkedId) return status(null, 'Link a collection first.');
+      let colorVars = [];
+      if (linkedId.indexOf('lib:') === 0) {
+        const key = linkedId.slice(4);
+        const libVars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(key);
+        const colorLibVars = libVars.filter((v) => v.resolvedType === 'COLOR').slice(0, 16);
+        for (const lv of colorLibVars) {
+          colorVars.push(await figma.variables.importVariableByKeyAsync(lv.key));
+        }
+      } else {
+        const id = linkedId.indexOf('local:') === 0 ? linkedId.slice(6) : linkedId; // legacy unprefixed = local
+        const col = await figma.variables.getVariableCollectionByIdAsync(id);
+        if (!col) return status(null, 'Linked collection not found — pick one again.');
+        colorVars = (await colorVariablesOf(col)).slice(0, 16);
+      }
+      if (!colorVars.length) return status(null, 'No color variables in that collection.');
+      const palette = [];
+      for (const v of colorVars) {
+        palette.push({
+          name: v.name,
+          light: await resolveColor(v, 'light'),
+          dark: await resolveColor(v, 'dark'),
+        });
+      }
+      reply({ type: 'variables-pulled', palette });
+    } catch (e) {
+      status(null, 'Pull failed: ' + e.message);
     }
-    reply({ type: 'variables-pulled', palette });
 
   // ---- custom shader targeting ---------------------------------------------
   } else if (msg.type === 'get-shader-map') {
@@ -167,7 +202,13 @@ figma.ui.onmessage = async (msg) => {
     try {
       let col = null;
       const linkedId = await figma.clientStorage.getAsync(VAR_LINK_KEY);
-      if (linkedId) col = await figma.variables.getVariableCollectionByIdAsync(linkedId);
+      if (linkedId && linkedId.indexOf('lib:') === 0) {
+        return status(null, 'The linked collection is a published library — edit its variables in the library file itself. (Pull works here; Push can’t write across files.)');
+      }
+      if (linkedId) {
+        const id = linkedId.indexOf('local:') === 0 ? linkedId.slice(6) : linkedId;
+        col = await figma.variables.getVariableCollectionByIdAsync(id);
+      }
       if (!col) {
         const collections = await figma.variables.getLocalVariableCollectionsAsync();
         col = collections.find((c) => c.name === 'Mesh Gradient');
