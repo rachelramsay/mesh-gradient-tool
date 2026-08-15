@@ -1,13 +1,57 @@
+/* shadcn/ui design language (zinc theme), ported to plain CSS.
+   Figma (themeColors: true) sets .figma-light / .figma-dark on <html>;
+   dark is the default so the browser preview matches too. */
+:root {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 91% 71%;
+  --ring: 240 4.9% 83.9%;
+  --radius: 8px;
+}
+.figma-light {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --ring: 240 10% 3.9%;
+}
+
 * { box-sizing: border-box; margin: 0; }
 body {
-  background: var(--figma-color-bg, #2c2c2c);
-  color: var(--figma-color-text, #e6e6e6);
-  font: 11px/1.5 -apple-system, system-ui, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: 500 11.5px/1.5 "Inter", -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
   user-select: none;
 }
-#app { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+#app { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
 
-#stage { position: relative; border-radius: 8px; overflow: hidden; height: 190px; }
+/* ---- stage ------------------------------------------------------------- */
+#stage {
+  position: relative; height: 190px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  overflow: hidden;
+}
 #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
 #handles { position: absolute; inset: 0; pointer-events: none; transition: opacity .15s; }
 #handles.hide { opacity: 0; visibility: hidden; }
@@ -15,55 +59,117 @@ body {
   position: absolute; width: 14px; height: 14px; border-radius: 50%;
   transform: translate(-50%, -50%);
   border: 2px solid #fff; background: var(--c);
-  box-shadow: 0 0 0 1px rgba(0,0,0,.4);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .4);
   pointer-events: auto; cursor: grab; padding: 0; touch-action: none;
 }
-.handle.on { border-color: #7aa2ff; box-shadow: 0 0 0 2px #7aa2ff; }
-#stagebar { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.handle.on { box-shadow: 0 0 0 2px hsl(var(--ring)); }
+#stagebar { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
 .chip {
-  background: rgba(0,0,0,.55); color: #fff; border: 0; border-radius: 6px;
-  padding: 4px 8px; font-size: 10px; cursor: pointer;
+  background: rgb(0 0 0 / .55); color: #fff; border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 4px 9px; font: 500 10px/1.4 inherit; cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.chip:hover { background: rgb(0 0 0 / .7); }
+
+/* ---- layout ------------------------------------------------------------ */
+.section { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lbl { display: flex; align-items: center; gap: 6px; color: hsl(var(--muted-foreground)); font-weight: 500; }
+
+/* ---- buttons (shadcn variants) ----------------------------------------- */
+.act, .mini {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid hsl(var(--input));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-radius: calc(var(--radius) - 2px);
+  font-weight: 500; cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.act { padding: 8px 10px; font-size: 11px; }
+.mini { padding: 4px 10px; font-size: 10.5px; }
+.act:hover, .mini:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.act.primary {
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  border-color: transparent;
+}
+.act.primary:hover { background: hsl(var(--primary) / .9); }
+.act:disabled { opacity: .5; cursor: not-allowed; }
+.act:focus-visible, .mini:focus-visible, select:focus-visible, .paste-area:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
 }
 
-.section { display: flex; flex-direction: column; gap: 6px; }
-.row { display: flex; align-items: center; gap: 6px; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* ---- selects ------------------------------------------------------------ */
+select {
+  flex: 1; appearance: none;
+  background: hsl(var(--background));
+  background-image: linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+    linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 10px) 55%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--input));
+  border-radius: calc(var(--radius) - 2px);
+  padding: 6px 26px 6px 10px; font: inherit; font-size: 11px; cursor: pointer;
+}
+select:hover { border-color: hsl(var(--ring) / .4); }
 
-.swatchrow { display: flex; flex-wrap: wrap; gap: 4px; }
+/* ---- sliders (shadcn slider) -------------------------------------------- */
+.sld { display: flex; align-items: center; gap: 10px; }
+.sld span { width: 66px; color: hsl(var(--muted-foreground)); flex: none; font-size: 10.5px; white-space: nowrap; }
+.sld output {
+  width: 32px; text-align: right; flex: none;
+  color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; font-size: 10.5px;
+}
+.sld input {
+  flex: 1; appearance: none; -webkit-appearance: none; height: 16px; background: none; cursor: pointer;
+}
+.sld input::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px; background: hsl(var(--secondary));
+}
+.sld input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px;
+  border-radius: 50%; background: hsl(var(--background));
+  border: 1px solid hsl(var(--ring) / .6);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+}
+.sld input::-moz-range-track { height: 6px; border-radius: 999px; background: hsl(var(--secondary)); }
+.sld input::-moz-range-thumb {
+  width: 13px; height: 13px; border-radius: 50%; background: hsl(var(--background));
+  border: 1px solid hsl(var(--ring) / .6);
+}
+
+/* ---- swatches + color inputs -------------------------------------------- */
+.swatchrow { display: flex; flex-wrap: wrap; gap: 5px; }
 .swatch {
-  width: 17px; height: 17px; border-radius: 4px; border: 1px solid transparent;
+  width: 18px; height: 18px; border-radius: 5px;
+  border: 1px solid hsl(var(--border));
   background: var(--c); cursor: pointer; padding: 0;
 }
-.swatch.on { border-color: #fff; outline: 2px solid #7aa2ff; }
-
-.lbl { display: flex; align-items: center; gap: 5px; color: var(--figma-color-text-secondary, #999); }
+.swatch.on { box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring)); }
 input[type=color] {
-  width: 30px; height: 20px; padding: 0; border: 1px solid var(--figma-color-border, #444);
-  border-radius: 4px; background: none; cursor: pointer;
-}
-.mini {
-  background: var(--figma-color-bg-secondary, #383838); color: inherit;
-  border: 1px solid var(--figma-color-border, #444); border-radius: 5px;
-  padding: 3px 8px; cursor: pointer; font-size: 10px;
+  width: 34px; height: 22px; padding: 1px;
+  border: 1px solid hsl(var(--input));
+  border-radius: calc(var(--radius) - 4px);
+  background: hsl(var(--background)); cursor: pointer;
 }
 
-.sld { display: flex; align-items: center; gap: 8px; }
-.sld span { width: 62px; color: var(--figma-color-text-secondary, #999); flex: none; }
-.sld output { width: 30px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
-.sld input { flex: 1; accent-color: #7aa2ff; height: 14px; }
-
-select {
-  flex: 1; background: var(--figma-color-bg-secondary, #383838); color: inherit;
-  border: 1px solid var(--figma-color-border, #444); border-radius: 5px; padding: 4px;
+/* ---- paste area ---------------------------------------------------------- */
+.paste-area, #clip {
+  width: 100%; resize: vertical;
+  background: transparent; color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--input));
+  border-radius: calc(var(--radius) - 2px);
+  padding: 8px; font: 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.act {
-  background: var(--figma-color-bg-secondary, #383838); color: inherit;
-  border: 1px solid var(--figma-color-border, #444); border-radius: 6px;
-  padding: 7px 6px; cursor: pointer; font-size: 10px; font-weight: 600;
-}
-.act.primary { background: var(--figma-color-bg-brand, #0d99ff); border-color: transparent; color: #fff; }
-.act:disabled { opacity: .4; cursor: not-allowed; }
+.paste-area::placeholder { color: hsl(var(--muted-foreground)); }
 
-#status { min-height: 26px; color: var(--figma-color-text-secondary, #999); }
-#status.err { color: var(--figma-color-text-danger, #ff8a8a); }
+/* ---- status -------------------------------------------------------------- */
+#status { min-height: 28px; color: hsl(var(--muted-foreground)); font-weight: 400; }
+#status.err { color: hsl(var(--destructive)); }
+#shadertarget { justify-content: center; font-size: 10.5px; }
 #clip { position: absolute; left: -9999px; top: 0; width: 10px; height: 10px; }

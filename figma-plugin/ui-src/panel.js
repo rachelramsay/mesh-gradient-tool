@@ -3,7 +3,7 @@
 // ENGINE_SRC string used for the code exports. Outside Figma (opened directly
 // in a browser for testing) Figma-side actions are stubbed.
 
-const PANEL_VERSION = 15; // bump on each build_plugin.py rebuild worth telling apart
+const PANEL_VERSION = 16; // bump on each build_plugin.py rebuild worth telling apart
 const IN_FIGMA = window.parent !== window;
 const $ = (id) => document.getElementById(id);
 const post = (msg) => { if (IN_FIGMA) parent.postMessage({ pluginMessage: msg }, '*'); };
